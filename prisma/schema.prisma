@@ -1,0 +1,307 @@
+// Prisma schema for the Elevate service booking platform.
+// Docs: https://pris.ly/d/prisma-schema
+//
+// Conventions:
+//   - Money is stored in INTEGER MINOR units (e.g. cents) to avoid float drift.
+//   - All ids are UUID strings. All tables carry createdAt / updatedAt.
+//   - Enums live here as the single source of truth and are re-exported to the
+//     app via src/enums (which imports them from @prisma/client).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Enums
+// ────────────────────────────────────────────────────────────────────────────
+
+enum UserRole {
+  CUSTOMER
+  PROVIDER
+  COORDINATOR
+  ADMIN
+}
+
+enum UserStatus {
+  PENDING_VERIFICATION
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum BookingStatus {
+  DRAFT
+  PENDING
+  CONFIRMED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+enum PaymentStatus {
+  PENDING
+  AUTHORIZED
+  PAID
+  FAILED
+  REFUNDED
+  PARTIALLY_REFUNDED
+}
+
+enum WaitlistStatus {
+  ACTIVE
+  NOTIFIED
+  CONVERTED
+  CANCELLED
+  EXPIRED
+}
+
+enum LocationMode {
+  ONSITE
+  REMOTE
+  HYBRID
+}
+
+enum NotificationType {
+  BOOKING_CONFIRMED
+  BOOKING_CANCELLED
+  WAITLIST_AVAILABLE
+  REVIEW_REQUEST
+  GENERIC
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+  READ
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Identity & access
+// ────────────────────────────────────────────────────────────────────────────
+
+model User {
+  id              String     @id @default(uuid())
+  email           String     @unique
+  passwordHash    String
+  firstName       String?
+  lastName        String?
+  phone           String?
+  role            UserRole   @default(CUSTOMER)
+  status          UserStatus @default(PENDING_VERIFICATION)
+  emailVerifiedAt DateTime?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  providerProfile    ServiceProvider?
+  bookingsAsCustomer Booking[]        @relation("CustomerBookings")
+  reviews            Review[]
+  refreshTokens      RefreshToken[]
+  waitlistEntries    WaitlistEntry[]
+  notifications      Notification[]
+
+  @@index([role])
+  @@index([status])
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+/// Profile for users who deliver services (role PROVIDER or COORDINATOR).
+model ServiceProvider {
+  id         String   @id @default(uuid())
+  userId     String   @unique
+  displayName String
+  bio        String?
+  isVerified Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  services          Service[]
+  availabilitySlots AvailabilitySlot[]
+  bookings          Booking[]          @relation("ProviderBookings")
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Catalog
+// ────────────────────────────────────────────────────────────────────────────
+
+model ServiceCategory {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  slug        String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  services Service[]
+}
+
+model Service {
+  id              String       @id @default(uuid())
+  name            String
+  slug            String       @unique
+  description     String?
+  categoryId      String
+  providerId      String?
+  priceAmount     Int
+  currency        String       @default("USD")
+  durationMinutes Int          @default(60)
+  locationMode    LocationMode @default(ONSITE)
+  isActive        Boolean      @default(true)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  category          ServiceCategory    @relation(fields: [categoryId], references: [id])
+  provider          ServiceProvider?   @relation(fields: [providerId], references: [id])
+  bookings          Booking[]
+  reviews           Review[]
+  availabilitySlots AvailabilitySlot[]
+  waitlistEntries   WaitlistEntry[]
+
+  @@index([categoryId])
+  @@index([providerId])
+  @@index([isActive])
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Booking & scheduling
+// ────────────────────────────────────────────────────────────────────────────
+
+model Booking {
+  id             String        @id @default(uuid())
+  reference      String        @unique
+  customerId     String
+  serviceId      String
+  providerId     String?
+  status         BookingStatus @default(PENDING)
+  scheduledStart DateTime
+  scheduledEnd   DateTime
+  priceAmount    Int
+  currency       String        @default("USD")
+  locationMode   LocationMode  @default(ONSITE)
+  notes          String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  customer User             @relation("CustomerBookings", fields: [customerId], references: [id])
+  service  Service          @relation(fields: [serviceId], references: [id])
+  provider ServiceProvider? @relation("ProviderBookings", fields: [providerId], references: [id])
+  payment  Payment?
+  review   Review?
+
+  @@index([customerId])
+  @@index([serviceId])
+  @@index([providerId])
+  @@index([status])
+  @@index([scheduledStart])
+}
+
+model AvailabilitySlot {
+  id         String   @id @default(uuid())
+  serviceId  String?
+  providerId String?
+  startTime  DateTime
+  endTime    DateTime
+  isBooked   Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  service  Service?         @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  provider ServiceProvider? @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@index([serviceId, startTime])
+  @@index([providerId, startTime])
+}
+
+model WaitlistEntry {
+  id          String         @id @default(uuid())
+  serviceId   String
+  userId      String
+  status      WaitlistStatus @default(ACTIVE)
+  desiredDate DateTime?
+  notifiedAt  DateTime?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  service Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([serviceId, userId])
+  @@index([serviceId])
+  @@index([status])
+}
+
+model Review {
+  id          String   @id @default(uuid())
+  bookingId   String   @unique
+  serviceId   String
+  authorId    String
+  rating      Int
+  comment     String?
+  isPublished Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  service Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  author  User    @relation(fields: [authorId], references: [id])
+
+  @@index([serviceId])
+  @@index([authorId])
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Forward-looking (payments & notifications) — modelled now so future modules
+// plug in without a schema rewrite.
+// ────────────────────────────────────────────────────────────────────────────
+
+model Payment {
+  id         String        @id @default(uuid())
+  bookingId  String        @unique
+  amount     Int
+  currency   String        @default("USD")
+  status     PaymentStatus @default(PENDING)
+  provider   String?
+  externalId String?
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+}
+
+model Notification {
+  id        String             @id @default(uuid())
+  userId    String
+  type      NotificationType
+  status    NotificationStatus @default(PENDING)
+  title     String
+  body      String
+  data      Json?
+  readAt    DateTime?
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+}
