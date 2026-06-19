@@ -39,7 +39,7 @@ bookingsRouter.patch(
 );
 bookingsRouter.patch(
   "/:id/status",
-  authorize(UserRole.ADMIN, UserRole.COORDINATOR),
+  authorize(UserRole.SYSTEM_ADMIN, UserRole.SYSTEM_COORDINATOR),
   validate({ params: bookingIdSchema, body: updateBookingStatusSchema }),
   asyncHandler(bookingsController.updateStatus),
 );

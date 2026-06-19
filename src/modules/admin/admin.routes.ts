@@ -7,7 +7,7 @@ import { UserRole } from "../../enums";
 
 export const adminRouter = Router();
 
-// Entire admin surface is restricted to ADMIN (and COORDINATOR where noted).
-adminRouter.use(authenticate, authorize(UserRole.ADMIN, UserRole.COORDINATOR));
+// Entire admin surface is restricted to SYSTEM_ADMIN (and SYSTEM_COORDINATOR where noted).
+adminRouter.use(authenticate, authorize(UserRole.SYSTEM_ADMIN, UserRole.SYSTEM_COORDINATOR));
 
 adminRouter.get("/dashboard", asyncHandler(adminController.dashboard));

@@ -24,14 +24,14 @@ availabilityRouter.get(
 availabilityRouter.post(
   "/",
   authenticate,
-  authorize(UserRole.ADMIN, UserRole.COORDINATOR, UserRole.PROVIDER),
+  authorize(UserRole.SYSTEM_ADMIN, UserRole.SYSTEM_COORDINATOR, UserRole.SYSTEM_PROVIDER),
   validate({ body: createSlotSchema }),
   asyncHandler(availabilityController.create),
 );
 availabilityRouter.delete(
   "/:id",
   authenticate,
-  authorize(UserRole.ADMIN, UserRole.COORDINATOR, UserRole.PROVIDER),
+  authorize(UserRole.SYSTEM_ADMIN, UserRole.SYSTEM_COORDINATOR, UserRole.SYSTEM_PROVIDER),
   validate({ params: slotIdSchema }),
   asyncHandler(availabilityController.remove),
 );

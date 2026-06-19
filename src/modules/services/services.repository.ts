@@ -11,6 +11,14 @@ export class ServicesRepository {
   findById(id: string) {
     return prisma.service.findUnique({ where: { id } });
   }
+  /** Detail lookup that also carries the parent category's status, so callers
+   *  can enforce public visibility (services under a non-ACTIVE category). */
+  findByIdWithCategoryStatus(id: string) {
+    return prisma.service.findUnique({
+      where: { id },
+      include: { category: { select: { status: true } } },
+    });
+  }
   create(data: Prisma.ServiceUncheckedCreateInput) {
     return prisma.service.create({ data });
   }

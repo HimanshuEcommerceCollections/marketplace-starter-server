@@ -6,3 +6,4 @@ export * from "./password";
 export * from "./pagination";
 export * from "./logger";
 export * from "./user";
+export * from "./slugify";

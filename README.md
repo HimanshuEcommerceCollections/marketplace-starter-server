@@ -132,7 +132,7 @@ Built-in support for the features you flagged as "future":
 | Future feature        | Already in place                                              |
 | --------------------- | ------------------------------------------------------------ |
 | Role-based access     | `UserRole` enum + `authorize()` + `roles.ts` groups          |
-| Service providers     | `ServiceProvider` model + `PROVIDER`/`COORDINATOR` roles     |
+| Service providers     | `ServiceProvider` model + `SYSTEM_PROVIDER`/`SYSTEM_COORDINATOR` roles |
 | Payments              | `Payment` model + `PaymentStatus` (add `modules/payments/`)  |
 | Notifications         | `Notification` model + types (add `modules/notifications/`)  |
 | Admin dashboard       | `modules/admin/` with aggregate repository                   |

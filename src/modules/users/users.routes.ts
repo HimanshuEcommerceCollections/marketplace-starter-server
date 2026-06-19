@@ -29,7 +29,7 @@ usersRouter.patch(
 usersRouter.get(
   "/",
   authenticate,
-  authorize(UserRole.ADMIN, UserRole.COORDINATOR),
+  authorize(UserRole.SYSTEM_ADMIN, UserRole.SYSTEM_COORDINATOR),
   validate({ query: listUsersSchema }),
   asyncHandler(usersController.list),
 );
@@ -38,28 +38,28 @@ usersRouter.get(
 usersRouter.post(
   "/",
   authenticate,
-  authorize(UserRole.ADMIN),
+  authorize(UserRole.SYSTEM_ADMIN),
   validate({ body: createUserSchema }),
   asyncHandler(usersController.create),
 );
 usersRouter.get(
   "/:id",
   authenticate,
-  authorize(UserRole.ADMIN, UserRole.COORDINATOR),
+  authorize(UserRole.SYSTEM_ADMIN, UserRole.SYSTEM_COORDINATOR),
   validate({ params: userIdSchema }),
   asyncHandler(usersController.getById),
 );
 usersRouter.patch(
   "/:id/role",
   authenticate,
-  authorize(UserRole.ADMIN),
+  authorize(UserRole.SYSTEM_ADMIN),
   validate({ params: userIdSchema, body: updateRoleSchema }),
   asyncHandler(usersController.updateRole),
 );
 usersRouter.patch(
   "/:id/status",
   authenticate,
-  authorize(UserRole.ADMIN),
+  authorize(UserRole.SYSTEM_ADMIN),
   validate({ params: userIdSchema, body: updateStatusSchema }),
   asyncHandler(usersController.updateStatus),
 );

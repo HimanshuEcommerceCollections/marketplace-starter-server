@@ -25,3 +25,27 @@ export function authenticate(
     next(ApiError.unauthorized("Invalid or expired token"));
   }
 }
+
+/**
+ * Like {@link authenticate} but never rejects: when a valid Bearer token is
+ * present, attaches `req.user`; otherwise proceeds anonymously. Used on public
+ * read endpoints whose response varies by role (e.g. staff see all statuses,
+ * customers see only ACTIVE).
+ */
+export function optionalAuthenticate(
+  req: Request,
+  _res: Response,
+  next: NextFunction,
+): void {
+  const header = req.headers.authorization;
+  if (!header?.startsWith("Bearer ")) return next();
+
+  const token = header.slice("Bearer ".length).trim();
+  try {
+    const payload = verifyAccessToken(token);
+    req.user = { id: payload.id, email: payload.email, role: payload.role };
+  } catch {
+    // Invalid/expired token on an optional route → treat as anonymous.
+  }
+  next();
+}

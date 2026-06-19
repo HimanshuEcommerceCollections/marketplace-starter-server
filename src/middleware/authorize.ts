@@ -4,7 +4,7 @@ import type { UserRole } from "../enums";
 
 /**
  * Role-based access control. Use after `authenticate`:
- *   router.post("/", authenticate, authorize(UserRole.ADMIN), handler)
+ *   router.post("/", authenticate, authorize(UserRole.SYSTEM_ADMIN), handler)
  */
 export function authorize(...allowed: UserRole[]) {
   return (req: Request, _res: Response, next: NextFunction): void => {

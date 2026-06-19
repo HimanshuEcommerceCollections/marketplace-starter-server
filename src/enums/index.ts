@@ -9,6 +9,9 @@ export {
   PaymentStatus,
   WaitlistStatus,
   LocationMode,
+  CategoryStatus,
+  ConfigInputType,
+  ConfigApplies,
   NotificationType,
   NotificationStatus,
 } from "@prisma/client";

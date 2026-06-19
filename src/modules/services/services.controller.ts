@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import { servicesService } from "./services.service";
 import { sendSuccess } from "../../utils/api-response";
 import { HttpStatus } from "../../constants/http-status";
+import { isStaffRole } from "../../constants/roles";
 import type {
   CreateServiceDto,
   UpdateServiceDto,
@@ -10,14 +11,17 @@ import type {
 
 export class ServicesController {
   list = async (req: Request, res: Response) => {
+    const staff = !!req.user && isStaffRole(req.user.role);
     const { items, meta } = await servicesService.list(
       req.query as unknown as ListServicesQuery,
+      staff,
     );
     sendSuccess(res, items, "Services fetched", undefined, meta);
   };
 
   getById = async (req: Request, res: Response) => {
-    sendSuccess(res, await servicesService.getById(req.params.id));
+    const staff = !!req.user && isStaffRole(req.user.role);
+    sendSuccess(res, await servicesService.getById(req.params.id, staff));
   };
 
   create = async (req: Request, res: Response) => {

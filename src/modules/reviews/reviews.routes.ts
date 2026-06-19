@@ -38,7 +38,7 @@ reviewsRouter.post(
 reviewsRouter.patch(
   "/:id/moderate",
   authenticate,
-  authorize(UserRole.ADMIN, UserRole.COORDINATOR),
+  authorize(UserRole.SYSTEM_ADMIN, UserRole.SYSTEM_COORDINATOR),
   validate({ params: reviewIdSchema, body: moderateReviewSchema }),
   asyncHandler(reviewsController.moderate),
 );

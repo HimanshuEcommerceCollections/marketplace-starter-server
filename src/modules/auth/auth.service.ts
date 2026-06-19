@@ -41,7 +41,7 @@ export class AuthService {
     if (existing) throw ApiError.conflict("An account with this email already exists");
 
     const passwordHash = await hashPassword(dto.password);
-    // role omitted → defaults to CUSTOMER (self-signup can never set a role).
+    // role omitted → defaults to USER_CUSTOMER (self-signup can never set a role).
     const user = await authRepository.createUser({
       email: dto.email,
       passwordHash,
