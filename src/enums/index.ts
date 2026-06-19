@@ -4,6 +4,7 @@
 export {
   UserRole,
   UserStatus,
+  Brand,
   BookingStatus,
   PaymentStatus,
   WaitlistStatus,

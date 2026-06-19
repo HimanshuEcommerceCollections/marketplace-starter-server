@@ -6,6 +6,7 @@ import { validate } from "../../middleware/validate";
 import { usersController } from "./users.controller";
 import {
   listUsersSchema,
+  createUserSchema,
   userIdSchema,
   updateMeSchema,
   updateRoleSchema,
@@ -31,6 +32,15 @@ usersRouter.get(
   authorize(UserRole.ADMIN, UserRole.COORDINATOR),
   validate({ query: listUsersSchema }),
   asyncHandler(usersController.list),
+);
+
+// Admin creates an account for any user type (provider/coordinator/admin/customer).
+usersRouter.post(
+  "/",
+  authenticate,
+  authorize(UserRole.ADMIN),
+  validate({ body: createUserSchema }),
+  asyncHandler(usersController.create),
 );
 usersRouter.get(
   "/:id",

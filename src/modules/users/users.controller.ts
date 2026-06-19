@@ -2,8 +2,10 @@ import type { Request, Response } from "express";
 import { usersService } from "./users.service";
 import { sendSuccess } from "../../utils/api-response";
 import { ApiError } from "../../utils/api-error";
+import { HttpStatus } from "../../constants/http-status";
 import type {
   ListUsersQuery,
+  CreateUserDto,
   UpdateMeDto,
   UpdateRoleDto,
   UpdateStatusDto,
@@ -19,6 +21,11 @@ export class UsersController {
 
   getById = async (req: Request, res: Response) => {
     sendSuccess(res, await usersService.getById(req.params.id));
+  };
+
+  create = async (req: Request, res: Response) => {
+    const user = await usersService.create(req.body as CreateUserDto);
+    sendSuccess(res, user, "User created", HttpStatus.CREATED);
   };
 
   getMe = async (req: Request, res: Response) => {

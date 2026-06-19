@@ -34,6 +34,13 @@ enum UserStatus {
   SUSPENDED
 }
 
+enum Brand {
+  ELEVATE
+  APEX
+  EVENTS
+  EDUCATION
+}
+
 enum BookingStatus {
   DRAFT
   PENDING
@@ -90,9 +97,9 @@ model User {
   id              String     @id @default(uuid())
   email           String     @unique
   passwordHash    String
-  firstName       String?
-  lastName        String?
+  name            String
   phone           String?
+  brand           Brand
   role            UserRole   @default(CUSTOMER)
   status          UserStatus @default(PENDING_VERIFICATION)
   emailVerifiedAt DateTime?

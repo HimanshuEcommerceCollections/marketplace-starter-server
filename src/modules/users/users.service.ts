@@ -2,9 +2,12 @@ import type { Prisma } from "@prisma/client";
 import { usersRepository } from "./users.repository";
 import { ApiError } from "../../utils/api-error";
 import { toPublicUser } from "../../utils/user";
+import { hashPassword } from "../../utils/password";
 import { buildPagination, buildMeta } from "../../utils/pagination";
+import { UserStatus } from "../../enums";
 import type {
   ListUsersQuery,
+  CreateUserDto,
   UpdateMeDto,
   UpdateRoleDto,
   UpdateStatusDto,
@@ -27,6 +30,24 @@ export class UsersService {
   async getById(id: string) {
     const user = await usersRepository.findById(id);
     if (!user) throw ApiError.notFound("User not found");
+    return toPublicUser(user);
+  }
+
+  /** Admin-provisioned account: any role, initial password, status ACTIVE. */
+  async create(dto: CreateUserDto) {
+    const existing = await usersRepository.findByEmail(dto.email);
+    if (existing) throw ApiError.conflict("An account with this email already exists");
+
+    const passwordHash = await hashPassword(dto.password);
+    const user = await usersRepository.create({
+      name: dto.name,
+      email: dto.email,
+      passwordHash,
+      phone: dto.phone,
+      brand: dto.brand,
+      role: dto.role,
+      status: UserStatus.ACTIVE,
+    });
     return toPublicUser(user);
   }
 

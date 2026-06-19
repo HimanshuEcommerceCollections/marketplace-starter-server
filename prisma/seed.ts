@@ -1,4 +1,4 @@
-import { PrismaClient, UserRole, UserStatus, LocationMode } from "@prisma/client";
+import { PrismaClient, UserRole, UserStatus, LocationMode, Brand } from "@prisma/client";
 import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
@@ -16,8 +16,8 @@ async function main() {
     create: {
       email: "admin@elevate.test",
       passwordHash,
-      firstName: "Platform",
-      lastName: "Admin",
+      name: "Platform Admin",
+      brand: Brand.ELEVATE,
       role: UserRole.ADMIN,
       status: UserStatus.ACTIVE,
       emailVerifiedAt: new Date(),

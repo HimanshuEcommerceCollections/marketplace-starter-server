@@ -11,6 +11,12 @@ export class UsersRepository {
   findById(id: string) {
     return prisma.user.findUnique({ where: { id } });
   }
+  findByEmail(email: string) {
+    return prisma.user.findUnique({ where: { email } });
+  }
+  create(data: Prisma.UserUncheckedCreateInput) {
+    return prisma.user.create({ data });
+  }
   update(id: string, data: Prisma.UserUncheckedUpdateInput) {
     return prisma.user.update({ where: { id }, data });
   }
