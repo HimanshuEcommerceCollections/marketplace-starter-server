@@ -5,6 +5,13 @@ export class CategoriesRepository {
   findMany(args: Prisma.ServiceCategoryFindManyArgs) {
     return prisma.serviceCategory.findMany(args);
   }
+  /** List view with the linked-services count attached (for the admin table). */
+  findManyWithServiceCount(args: Prisma.ServiceCategoryFindManyArgs) {
+    return prisma.serviceCategory.findMany({
+      ...args,
+      include: { _count: { select: { services: true } } },
+    });
+  }
   count(where?: Prisma.ServiceCategoryWhereInput) {
     return prisma.serviceCategory.count({ where });
   }

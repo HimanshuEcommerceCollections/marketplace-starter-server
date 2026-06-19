@@ -20,6 +20,7 @@ export interface CategoryResponse {
   status: CategoryStatus;
   coverImagePath: string;
   iconPath: string;
+  servicesCount?: number; // present on list + details
   createdAt: Date;
   updatedAt: Date;
 }

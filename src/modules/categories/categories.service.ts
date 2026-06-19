@@ -24,7 +24,7 @@ const ALLOWED_TRANSITIONS: Record<CategoryStatus, CategoryStatus[]> = {
 
 export class CategoriesService {
   /** Merge DB row with config-resolved assets into the API response shape. */
-  private serialize(category: ServiceCategory): CategoryResponse {
+  private serialize(category: ServiceCategory, servicesCount?: number): CategoryResponse {
     const assets = resolveCategoryAssets(category.slug);
     return {
       id: category.id,
@@ -35,6 +35,7 @@ export class CategoriesService {
       status: category.status,
       coverImagePath: assets.coverImagePath,
       iconPath: assets.iconPath,
+      ...(servicesCount !== undefined ? { servicesCount } : {}),
       createdAt: category.createdAt,
       updatedAt: category.updatedAt,
     };
@@ -77,7 +78,7 @@ export class CategoriesService {
     };
 
     const [items, total] = await Promise.all([
-      categoriesRepository.findMany({
+      categoriesRepository.findManyWithServiceCount({
         where,
         skip,
         take,
@@ -87,7 +88,7 @@ export class CategoriesService {
     ]);
 
     return {
-      items: items.map((c) => this.serialize(c)),
+      items: items.map((c) => this.serialize(c, c._count.services)),
       meta: buildMeta(page, limit, total),
     };
   }

@@ -19,13 +19,17 @@ const DEFAULT_ASSETS: CategoryAssets = {
   iconPath: "Sparkles",
 };
 
-/** slug -> assets. Keys mirror the catalog category/service slugs. */
+/** slug -> assets. Keys mirror the service-derived category slugs; iconPath is
+ *  the lucide icon name from the matching home-page service card. */
 const CATEGORY_ASSETS: Record<string, CategoryAssets> = {
-  bodywork: { coverImagePath: "/images/categories/bodywork.jpg", iconPath: "HandHelping" },
   massage: { coverImagePath: "/images/categories/massage.jpg", iconPath: "HandHelping" },
-  fitness: { coverImagePath: "/images/categories/fitness.jpg", iconPath: "Dumbbell" },
-  wellness: { coverImagePath: "/images/categories/wellness.jpg", iconPath: "Salad" },
-  therapy: { coverImagePath: "/images/categories/therapy.jpg", iconPath: "Activity" },
+  "personal-training": { coverImagePath: "/images/categories/personal-training.jpg", iconPath: "Dumbbell" },
+  yoga: { coverImagePath: "/images/categories/yoga.jpg", iconPath: "Flower2" },
+  beauty: { coverImagePath: "/images/categories/beauty.jpg", iconPath: "Sparkles" },
+  "nutrition-coaching": { coverImagePath: "/images/categories/nutrition-coaching.jpg", iconPath: "Salad" },
+  "life-coaching": { coverImagePath: "/images/categories/life-coaching.jpg", iconPath: "Compass" },
+  "physical-therapy": { coverImagePath: "/images/categories/physical-therapy.jpg", iconPath: "Activity" },
+  "speech-therapy": { coverImagePath: "/images/categories/speech-therapy.jpg", iconPath: "MessageCircle" },
 };
 
 /** Resolve a category's presentation assets by slug, falling back to defaults. */

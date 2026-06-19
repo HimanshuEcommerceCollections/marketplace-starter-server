@@ -66,29 +66,27 @@ async function main() {
     },
   });
 
-  // ── Categories (basePrice = lowest from_price among the category's services) ──
-  const minFromPriceByCat = new Map<string, number>();
-  for (const svc of catalog.services as any[]) {
-    const fp = svc.from_price ?? 0;
-    const cur = minFromPriceByCat.get(svc.category);
-    if (cur === undefined || fp < cur) minFromPriceByCat.set(svc.category, fp);
-  }
-
+  // ── Categories — one per home-page service card (slug = service id) ───────────
+  // Each service maps 1:1 to a same-named category. Details come from the card:
+  // name = title, description = summary, basePrice = from_price (cents),
+  // status = coming_soon ? DRAFT : ACTIVE.
   const categoryIdBySlug = new Map<string, string>();
-  for (const cat of catalog.categories as any[]) {
-    const basePrice = minFromPriceByCat.get(cat.id) ?? 0;
+  const categorySlugs: string[] = [];
+  for (const svc of catalog.services as any[]) {
+    const status = svc.coming_soon ? CategoryStatus.DRAFT : CategoryStatus.ACTIVE;
+    const fields = {
+      name: svc.title,
+      description: svc.summary ?? null,
+      basePrice: svc.from_price ?? 0,
+      status,
+    };
     const row = await prisma.serviceCategory.upsert({
-      where: { slug: cat.id },
-      update: { name: cat.title, description: cat.description, basePrice, status: CategoryStatus.ACTIVE },
-      create: {
-        name: cat.title,
-        slug: cat.id,
-        description: cat.description,
-        basePrice,
-        status: CategoryStatus.ACTIVE,
-      },
+      where: { slug: svc.id },
+      update: fields,
+      create: { slug: svc.id, ...fields },
     });
-    categoryIdBySlug.set(cat.id, row.id);
+    categoryIdBySlug.set(svc.id, row.id);
+    categorySlugs.push(svc.id);
   }
 
   // ── Services + nested config (groups → options) ───────────────────────────────
@@ -97,8 +95,8 @@ async function main() {
   let optionCount = 0;
 
   for (const svc of catalog.services as any[]) {
-    const categoryId = categoryIdBySlug.get(svc.category);
-    if (!categoryId) throw new Error(`Unknown category '${svc.category}' for service '${svc.id}'`);
+    const categoryId = categoryIdBySlug.get(svc.id);
+    if (!categoryId) throw new Error(`Missing category for service '${svc.id}'`);
 
     const pricingRef: string = svc.pricing_ref ?? svc.id;
     const priceAmount: number = pricing.services?.[pricingRef]?.base_price?.amount ?? 0;
@@ -166,9 +164,25 @@ async function main() {
     }
   }
 
+  // Prune stray services not in the catalog (e.g. the legacy "deep-tissue-massage"
+  // from the original minimal seed) so the legacy categories they reference become
+  // orphaned. Service config groups cascade-delete with the service.
+  const removedServices = await prisma.service.deleteMany({
+    where: { slug: { notIn: categorySlugs } },
+  });
+
+  // Now remove every category that isn't one of the 8 service-derived ones
+  // (the legacy bodywork/fitness/wellness/therapy taxonomy). All such categories
+  // are orphaned at this point, so the FK no longer blocks deletion.
+  const removedCategories = await prisma.serviceCategory.deleteMany({
+    where: { slug: { notIn: categorySlugs } },
+  });
+
   console.log(
-    `Seeded admin=${admin.email}, categories=${categoryIdBySlug.size}, ` +
-      `services=${serviceCount}, configGroups=${groupCount}, configOptions=${optionCount}`,
+    `Seeded admin=${admin.email}, categories=${categoryIdBySlug.size} ` +
+      `(removed ${removedCategories.count} legacy categories, ` +
+      `${removedServices.count} stray services), services=${serviceCount}, ` +
+      `configGroups=${groupCount}, configOptions=${optionCount}`,
   );
 }
 
