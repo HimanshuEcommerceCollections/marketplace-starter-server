@@ -31,16 +31,16 @@ const EnvSchema = z.object({
   RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(900_000),
   RATE_LIMIT_MAX: z.coerce.number().int().positive().default(100),
 
-  // Category assets. Uploaded icon/cover files are written under
-  // <ASSET_STORAGE_DIR>/categories/<slug>/ and served at the matching
-  // /categories/<slug>/... URL. Defaults to the Next.js client's public/ dir
+  // Service assets. Uploaded icon/cover files are written under
+  // <ASSET_STORAGE_DIR>/services/<slug>/ and served at the matching
+  // /services/<slug>/... URL. Defaults to the Next.js client's public/ dir
   // (sibling package) so the frontend serves them directly with no CORS or
   // origin juggling. The mutable asset registry (slug -> paths) is a JSON file
   // — NOT a TS module — because it must be read AND written at runtime; a
   // statically-imported const cannot be mutated and persisted. See
-  // src/config/category-assets.ts.
+  // src/config/service-image-assets.ts.
   ASSET_STORAGE_DIR: z.string().optional(),
-  CATEGORY_ASSETS_FILE: z.string().optional(),
+  SERVICE_ASSETS_FILE: z.string().optional(),
 });
 
 const parsed = EnvSchema.safeParse(process.env);

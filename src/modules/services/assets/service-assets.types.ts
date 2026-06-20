@@ -1,8 +1,8 @@
 import type { z } from "zod";
-import type { reorderCoversSchema } from "./category-assets.validation";
+import type { reorderCoversSchema } from "./service-assets.validation";
 
-/** Asset payload returned by every asset endpoint (mirrors ResolvedCategoryAssets). */
-export interface CategoryAssetsResponse {
+/** Asset payload returned by every asset endpoint (mirrors ResolvedServiceImageAssets). */
+export interface ServiceAssetsResponse {
   iconPath: string;
   coverImages: string[];
 }

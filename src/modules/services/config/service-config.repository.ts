@@ -53,12 +53,23 @@ export class ServiceConfigRepository {
   deleteOption(id: string) {
     return prisma.serviceConfigOption.delete({ where: { id } });
   }
-  /** Clear isDefault on every option in a group (single-select exclusivity). */
-  clearDefaults(groupId: string) {
-    return prisma.serviceConfigOption.updateMany({
-      where: { groupId },
-      data: { isDefault: false },
-    });
+
+  // ── Reorder (sortOrder = position in the provided id list) ────────────────────
+  /** Set each group's sortOrder to its index in `orderedIds`, atomically. */
+  reorderGroups(orderedIds: string[]) {
+    return prisma.$transaction(
+      orderedIds.map((id, i) =>
+        prisma.serviceConfigGroup.update({ where: { id }, data: { sortOrder: i } }),
+      ),
+    );
+  }
+  /** Set each option's sortOrder to its index in `orderedIds`, atomically. */
+  reorderOptions(orderedIds: string[]) {
+    return prisma.$transaction(
+      orderedIds.map((id, i) =>
+        prisma.serviceConfigOption.update({ where: { id }, data: { sortOrder: i } }),
+      ),
+    );
   }
 }
 

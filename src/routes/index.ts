@@ -2,7 +2,6 @@ import { Router } from "express";
 import { prisma } from "../db/client";
 import { authRouter } from "../modules/auth";
 import { usersRouter } from "../modules/users";
-import { categoriesRouter } from "../modules/categories";
 import { servicesRouter } from "../modules/services";
 import { bookingsRouter } from "../modules/bookings";
 import { availabilityRouter } from "../modules/availability";
@@ -25,7 +24,6 @@ apiRouter.get("/health", async (_req, res) => {
 
 apiRouter.use("/auth", authRouter);
 apiRouter.use("/users", usersRouter);
-apiRouter.use("/categories", categoriesRouter);
 apiRouter.use("/services", servicesRouter);
 apiRouter.use("/bookings", bookingsRouter);
 apiRouter.use("/availability", availabilityRouter);

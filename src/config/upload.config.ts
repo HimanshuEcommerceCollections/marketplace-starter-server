@@ -2,10 +2,10 @@ import path from "path";
 import { env } from "./env";
 
 /**
- * Centralized upload + asset-storage configuration for category assets.
+ * Centralized upload + asset-storage configuration for service assets.
  *
- * Files live on disk under ASSET_STORAGE_ROOT/categories/<slug>/ and are served
- * to the browser at the matching `/categories/<slug>/<file>` URL (the Next.js
+ * Files live on disk under ASSET_STORAGE_ROOT/services/<slug>/ and are served
+ * to the browser at the matching `/services/<slug>/<file>` URL (the Next.js
  * client serves its public/ dir, which is the default storage root). Nothing
  * here touches the database — assets are filesystem + JSON-config managed.
  */
@@ -15,15 +15,15 @@ export const ASSET_STORAGE_ROOT = env.ASSET_STORAGE_DIR
   ? path.resolve(env.ASSET_STORAGE_DIR)
   : path.resolve(process.cwd(), "..", "client", "public");
 
-/** URL + on-disk folder that all category asset folders live under. */
-export const CATEGORIES_DIR_NAME = "categories";
+/** URL + on-disk folder that all service asset folders live under. */
+export const SERVICES_DIR_NAME = "services";
 
 /** Slug used for the shared fallback assets folder. */
 export const DEFAULT_ASSETS_SLUG = "default";
 
 const KB = 1024;
 
-/** Icon: a single inline SVG per category. */
+/** Icon: a single inline SVG per service. */
 export const ICON_CONFIG = {
   field: "icon",
   filename: "icon.svg",
@@ -32,7 +32,7 @@ export const ICON_CONFIG = {
   allowedExtensions: [".svg"] as const,
 } as const;
 
-/** Cover images: multiple raster images per category (cards, hero, slideshows). */
+/** Cover images: multiple raster images per service (cards, hero, slideshows). */
 export const COVER_CONFIG = {
   field: "covers",
   maxBytes: 500 * KB,

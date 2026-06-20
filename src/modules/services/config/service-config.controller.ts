@@ -8,6 +8,8 @@ import type {
   UpdateConfigGroupDto,
   CreateConfigOptionDto,
   UpdateConfigOptionDto,
+  ReorderGroupsDto,
+  ReorderOptionsDto,
 } from "./service-config.types";
 
 export class ServiceConfigController {
@@ -47,6 +49,12 @@ export class ServiceConfigController {
     sendSuccess(res, null, "Config group deleted");
   };
 
+  reorderGroups = async (req: Request, res: Response) => {
+    const { groupIds } = req.body as ReorderGroupsDto;
+    const groups = await serviceConfigService.reorderGroups(req.params.serviceId, groupIds);
+    sendSuccess(res, groups, "Config groups reordered");
+  };
+
   // Option mutations (staff).
   createOption = async (req: Request, res: Response) => {
     const option = await serviceConfigService.createOption(
@@ -74,6 +82,16 @@ export class ServiceConfigController {
       req.params.optionId,
     );
     sendSuccess(res, null, "Config option deleted");
+  };
+
+  reorderOptions = async (req: Request, res: Response) => {
+    const { optionIds } = req.body as ReorderOptionsDto;
+    const group = await serviceConfigService.reorderOptions(
+      req.params.serviceId,
+      req.params.groupId,
+      optionIds,
+    );
+    sendSuccess(res, group, "Config options reordered");
   };
 }
 

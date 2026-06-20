@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-/** Category slug in the URL — same shape the categories module accepts. */
+/** Service slug in the URL — same shape the services module accepts. */
 const slugRegex = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 export const assetSlugParamSchema = z.object({
@@ -9,7 +9,7 @@ export const assetSlugParamSchema = z.object({
     .trim()
     .min(2)
     .max(80)
-    .regex(slugRegex, "Invalid category slug"),
+    .regex(slugRegex, "Invalid service slug"),
 });
 
 /**

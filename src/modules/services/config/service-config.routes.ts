@@ -9,6 +9,8 @@ import {
   updateConfigGroupSchema,
   createConfigOptionSchema,
   updateConfigOptionSchema,
+  reorderGroupsSchema,
+  reorderOptionsSchema,
   serviceParamsSchema,
   groupParamsSchema,
   optionParamsSchema,
@@ -40,6 +42,14 @@ serviceConfigRouter.post(
   validate({ params: serviceParamsSchema, body: createConfigGroupSchema }),
   asyncHandler(serviceConfigController.createGroup),
 );
+// Reorder must be registered BEFORE "/groups/:groupId" so "order" isn't parsed as a groupId.
+serviceConfigRouter.patch(
+  "/groups/order",
+  authenticate,
+  authorize(UserRole.SYSTEM_ADMIN, UserRole.SYSTEM_COORDINATOR),
+  validate({ params: serviceParamsSchema, body: reorderGroupsSchema }),
+  asyncHandler(serviceConfigController.reorderGroups),
+);
 serviceConfigRouter.patch(
   "/groups/:groupId",
   authenticate,
@@ -63,6 +73,14 @@ serviceConfigRouter.post(
   authorize(UserRole.SYSTEM_ADMIN, UserRole.SYSTEM_COORDINATOR),
   validate({ params: groupParamsSchema, body: createConfigOptionSchema }),
   asyncHandler(serviceConfigController.createOption),
+);
+// Reorder before "/options/:optionId" so "order" isn't parsed as an optionId.
+serviceConfigRouter.patch(
+  "/groups/:groupId/options/order",
+  authenticate,
+  authorize(UserRole.SYSTEM_ADMIN, UserRole.SYSTEM_COORDINATOR),
+  validate({ params: groupParamsSchema, body: reorderOptionsSchema }),
+  asyncHandler(serviceConfigController.reorderOptions),
 );
 serviceConfigRouter.patch(
   "/groups/:groupId/options/:optionId",
