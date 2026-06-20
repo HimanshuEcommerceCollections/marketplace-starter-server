@@ -18,8 +18,8 @@ export interface CategoryResponse {
   description: string | null;
   basePrice: number; // minor units (cents)
   status: CategoryStatus;
-  coverImagePath: string;
-  iconPath: string;
+  iconPath: string; // resolved SVG icon URL (config-managed, with fallback)
+  coverImages: string[]; // ordered cover image URLs; first is the default
   servicesCount?: number; // present on list + details
   createdAt: Date;
   updatedAt: Date;
