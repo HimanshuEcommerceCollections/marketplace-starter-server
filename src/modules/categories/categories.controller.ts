@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import { categoriesService } from "./categories.service";
 import { sendSuccess } from "../../utils/api-response";
 import { HttpStatus } from "../../constants/http-status";
+import type { CategoryStatus } from "../../enums";
 import type { CreateCategoryDto, UpdateCategoryDto, ListCategoriesQuery } from "./categories.types";
 
 export class CategoriesController {
@@ -36,6 +37,15 @@ export class CategoriesController {
 
   deactivate = async (req: Request, res: Response) => {
     sendSuccess(res, await categoriesService.deactivate(req.params.id), "Category deactivated");
+  };
+
+  setStatus = async (req: Request, res: Response) => {
+    const { status } = req.body as { status: CategoryStatus };
+    sendSuccess(
+      res,
+      await categoriesService.setStatus(req.params.id, status),
+      "Category status updated",
+    );
   };
 }
 

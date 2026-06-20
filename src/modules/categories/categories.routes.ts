@@ -7,6 +7,7 @@ import { categoriesController } from "./categories.controller";
 import {
   createCategorySchema,
   updateCategorySchema,
+  updateCategoryStatusSchema,
   listCategoriesSchema,
   categoryIdSchema,
 } from "./categories.validation";
@@ -48,6 +49,16 @@ categoriesRouter.patch(
 );
 
 // Lifecycle transitions.
+// Generic transition to any valid target status (Available / Coming Soon /
+// Draft / Inactive); guarded by the service-layer transition map.
+categoriesRouter.post(
+  "/:id/status",
+  authenticate,
+  authorize(UserRole.SYSTEM_ADMIN, UserRole.SYSTEM_COORDINATOR),
+  validate({ params: categoryIdSchema, body: updateCategoryStatusSchema }),
+  asyncHandler(categoriesController.setStatus),
+);
+
 categoriesRouter.post(
   "/:id/publish",
   authenticate,

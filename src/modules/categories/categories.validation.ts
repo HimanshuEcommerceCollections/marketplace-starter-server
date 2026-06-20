@@ -49,4 +49,9 @@ export const listCategoriesSchema = z.object({
   sort: z.nativeEnum(SortOrder).default(SortOrder.DESC),
 });
 
+/** POST /categories/:id/status — generic lifecycle change to any valid status. */
+export const updateCategoryStatusSchema = z.object({
+  status: z.nativeEnum(CategoryStatus),
+});
+
 export const categoryIdSchema = z.object({ id: z.string().uuid() });

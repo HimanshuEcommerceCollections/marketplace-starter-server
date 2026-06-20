@@ -17,10 +17,25 @@ import type {
 
 /** Allowed lifecycle transitions. Any pair not listed here is rejected. */
 const ALLOWED_TRANSITIONS: Record<CategoryStatus, CategoryStatus[]> = {
-  [CategoryStatus.DRAFT]: [CategoryStatus.ACTIVE],
-  [CategoryStatus.ACTIVE]: [CategoryStatus.INACTIVE],
-  [CategoryStatus.INACTIVE]: [CategoryStatus.ACTIVE],
+  [CategoryStatus.DRAFT]: [CategoryStatus.ACTIVE, CategoryStatus.COMING_SOON],
+  [CategoryStatus.ACTIVE]: [
+    CategoryStatus.DRAFT,
+    CategoryStatus.COMING_SOON,
+    CategoryStatus.INACTIVE,
+  ],
+  [CategoryStatus.COMING_SOON]: [
+    CategoryStatus.DRAFT,
+    CategoryStatus.ACTIVE,
+    CategoryStatus.INACTIVE,
+  ],
+  [CategoryStatus.INACTIVE]: [CategoryStatus.ACTIVE, CategoryStatus.COMING_SOON],
 };
+
+/** Statuses visible to non-staff (anonymous + customers) on public endpoints. */
+const PUBLIC_STATUSES: CategoryStatus[] = [
+  CategoryStatus.ACTIVE,
+  CategoryStatus.COMING_SOON,
+];
 
 export class CategoriesService {
   /** Merge DB row with config-resolved assets into the API response shape. */
@@ -57,7 +72,8 @@ export class CategoriesService {
 
   /**
    * List categories. Visibility is role-aware: staff may filter by any status
-   * (or see all); everyone else sees only ACTIVE categories.
+   * (or see all); everyone else sees only publicly-visible categories
+   * (ACTIVE + COMING_SOON). DRAFT and INACTIVE are never exposed to non-staff.
    */
   async list(
     query: ListCategoriesQuery,
@@ -74,7 +90,9 @@ export class CategoriesService {
         ? query.status
           ? { status: query.status }
           : {}
-        : { status: CategoryStatus.ACTIVE }),
+        : query.status && PUBLIC_STATUSES.includes(query.status)
+          ? { status: query.status }
+          : { status: { in: PUBLIC_STATUSES } }),
     };
 
     const [items, total] = await Promise.all([
@@ -144,14 +162,19 @@ export class CategoriesService {
     return this.serialize(updated);
   }
 
-  /** DRAFT|INACTIVE → ACTIVE. */
+  /** Move to ACTIVE (shortcut endpoint; valid from DRAFT|COMING_SOON|INACTIVE). */
   publish(id: string): Promise<CategoryResponse> {
     return this.transition(id, CategoryStatus.ACTIVE);
   }
 
-  /** ACTIVE → INACTIVE. Linked services are retained (no cascade). */
+  /** Move to INACTIVE (valid from ACTIVE|COMING_SOON). Linked services retained. */
   deactivate(id: string): Promise<CategoryResponse> {
     return this.transition(id, CategoryStatus.INACTIVE);
+  }
+
+  /** Generic lifecycle change to any target status, subject to the transition map. */
+  setStatus(id: string, to: CategoryStatus): Promise<CategoryResponse> {
+    return this.transition(id, to);
   }
 
   private async transition(
