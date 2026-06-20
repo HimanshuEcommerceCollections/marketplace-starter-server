@@ -1,10 +1,10 @@
 import type { Request, Response } from "express";
-import { categoryAssetsService } from "./category-assets.service";
+import { serviceAssetsService } from "./service-assets.service";
 import { sendSuccess } from "../../../utils/api-response";
 import { ApiError } from "../../../utils/api-error";
 import { HttpStatus } from "../../../constants/http-status";
 import { ICON_CONFIG, COVER_CONFIG } from "../../../config/upload.config";
-import type { UploadedFile, ReorderCoversDto } from "./category-assets.types";
+import type { UploadedFile, ReorderCoversDto } from "./service-assets.types";
 
 type MulterFiles = Record<string, Express.Multer.File[] | undefined>;
 
@@ -48,9 +48,9 @@ function extractFiles(req: Request): {
   };
 }
 
-export class CategoryAssetsController {
+export class ServiceAssetsController {
   get = async (req: Request, res: Response) => {
-    sendSuccess(res, await categoryAssetsService.getAssets(req.params.slug), "Category assets fetched");
+    sendSuccess(res, await serviceAssetsService.getAssets(req.params.slug), "Service assets fetched");
   };
 
   create = async (req: Request, res: Response) => {
@@ -58,11 +58,11 @@ export class CategoryAssetsController {
     if (!icon && !covers) {
       throw ApiError.badRequest("Provide an icon and/or at least one cover image");
     }
-    const assets = await categoryAssetsService.applyChanges(req.params.slug, {
+    const assets = await serviceAssetsService.applyChanges(req.params.slug, {
       icon,
       covers,
     });
-    sendSuccess(res, assets, "Category assets uploaded", HttpStatus.CREATED);
+    sendSuccess(res, assets, "Service assets uploaded", HttpStatus.CREATED);
   };
 
   update = async (req: Request, res: Response) => {
@@ -71,22 +71,22 @@ export class CategoryAssetsController {
     const removeCovers = parseStringArrayField(body.removeCovers, "removeCovers");
     const order = parseStringArrayField(body.order, "order");
     const removeIcon = body.removeIcon === "true" || body.removeIcon === true;
-    const assets = await categoryAssetsService.applyChanges(req.params.slug, {
+    const assets = await serviceAssetsService.applyChanges(req.params.slug, {
       icon,
       covers,
       removeIcon,
       removeCovers,
       order,
     });
-    sendSuccess(res, assets, "Category assets updated");
+    sendSuccess(res, assets, "Service assets updated");
   };
 
   deleteAll = async (req: Request, res: Response) => {
-    sendSuccess(res, await categoryAssetsService.deleteAll(req.params.slug), "Category assets deleted");
+    sendSuccess(res, await serviceAssetsService.deleteAll(req.params.slug), "Service assets deleted");
   };
 
   deleteCover = async (req: Request, res: Response) => {
-    const assets = await categoryAssetsService.deleteCover(
+    const assets = await serviceAssetsService.deleteCover(
       req.params.slug,
       req.params.coverId,
     );
@@ -95,9 +95,9 @@ export class CategoryAssetsController {
 
   reorder = async (req: Request, res: Response) => {
     const { coverImages } = req.body as ReorderCoversDto;
-    const assets = await categoryAssetsService.reorderCovers(req.params.slug, coverImages);
+    const assets = await serviceAssetsService.reorderCovers(req.params.slug, coverImages);
     sendSuccess(res, assets, "Cover order updated");
   };
 }
 
-export const categoryAssetsController = new CategoryAssetsController();
+export const serviceAssetsController = new ServiceAssetsController();

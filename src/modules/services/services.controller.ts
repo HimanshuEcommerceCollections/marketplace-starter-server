@@ -2,7 +2,7 @@ import type { Request, Response } from "express";
 import { servicesService } from "./services.service";
 import { sendSuccess } from "../../utils/api-response";
 import { HttpStatus } from "../../constants/http-status";
-import { isStaffRole } from "../../constants/roles";
+import type { ServiceStatus } from "../../enums";
 import type {
   CreateServiceDto,
   UpdateServiceDto,
@@ -11,17 +11,15 @@ import type {
 
 export class ServicesController {
   list = async (req: Request, res: Response) => {
-    const staff = !!req.user && isStaffRole(req.user.role);
     const { items, meta } = await servicesService.list(
       req.query as unknown as ListServicesQuery,
-      staff,
+      req.user?.role,
     );
     sendSuccess(res, items, "Services fetched", undefined, meta);
   };
 
   getById = async (req: Request, res: Response) => {
-    const staff = !!req.user && isStaffRole(req.user.role);
-    sendSuccess(res, await servicesService.getById(req.params.id, staff));
+    sendSuccess(res, await servicesService.getDetails(req.params.id));
   };
 
   create = async (req: Request, res: Response) => {
@@ -37,9 +35,21 @@ export class ServicesController {
     sendSuccess(res, service, "Service updated");
   };
 
-  remove = async (req: Request, res: Response) => {
-    await servicesService.remove(req.params.id);
-    sendSuccess(res, null, "Service deleted");
+  publish = async (req: Request, res: Response) => {
+    sendSuccess(res, await servicesService.publish(req.params.id), "Service published");
+  };
+
+  deactivate = async (req: Request, res: Response) => {
+    sendSuccess(res, await servicesService.deactivate(req.params.id), "Service deactivated");
+  };
+
+  setStatus = async (req: Request, res: Response) => {
+    const { status } = req.body as { status: ServiceStatus };
+    sendSuccess(
+      res,
+      await servicesService.setStatus(req.params.id, status),
+      "Service status updated",
+    );
   };
 }
 

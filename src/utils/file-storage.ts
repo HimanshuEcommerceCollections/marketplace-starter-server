@@ -2,25 +2,25 @@ import fs from "fs/promises";
 import path from "path";
 import {
   ASSET_STORAGE_ROOT,
-  CATEGORIES_DIR_NAME,
+  SERVICES_DIR_NAME,
 } from "../config/upload.config";
 
 /**
- * Filesystem layer for category assets. All paths are derived from
+ * Filesystem layer for service assets. All paths are derived from
  * ASSET_STORAGE_ROOT so the same code works in dev and prod, and every public
  * URL maps 1:1 to a file under that root. Slugs/filenames reaching here are
  * already validated upstream, but resolveWithinRoot() is a hard backstop
  * against path traversal regardless.
  */
 
-/** Absolute path to a category's asset folder. */
-export function categoryDir(slug: string): string {
-  return path.join(ASSET_STORAGE_ROOT, CATEGORIES_DIR_NAME, slug);
+/** Absolute path to a service's asset folder. */
+export function serviceDir(slug: string): string {
+  return path.join(ASSET_STORAGE_ROOT, SERVICES_DIR_NAME, slug);
 }
 
-/** Public URL for a file inside a category folder, e.g. /categories/yoga/icon.svg */
+/** Public URL for a file inside a service folder, e.g. /services/yoga/icon.svg */
 export function publicUrl(slug: string, filename: string): string {
-  return `/${CATEGORIES_DIR_NAME}/${slug}/${filename}`;
+  return `/${SERVICES_DIR_NAME}/${slug}/${filename}`;
 }
 
 /** Resolve a public URL path to its absolute file path, refusing to escape root. */
@@ -43,13 +43,13 @@ export async function ensureDir(dir: string): Promise<void> {
   await fs.mkdir(dir, { recursive: true });
 }
 
-/** Write a buffer to <categoryDir>/<filename>, creating the folder if needed. */
-export async function saveCategoryFile(
+/** Write a buffer to <serviceDir>/<filename>, creating the folder if needed. */
+export async function saveServiceFile(
   slug: string,
   filename: string,
   data: Buffer,
 ): Promise<void> {
-  const dir = categoryDir(slug);
+  const dir = serviceDir(slug);
   await ensureDir(dir);
   await fs.writeFile(path.join(dir, filename), data);
 }
@@ -63,7 +63,7 @@ export async function deleteByUrl(urlPath: string): Promise<void> {
   }
 }
 
-/** Remove a category folder if (and only if) it is empty. */
+/** Remove a service folder if (and only if) it is empty. */
 export async function removeDirIfEmpty(dir: string): Promise<void> {
   try {
     const entries = await fs.readdir(dir);
@@ -73,10 +73,10 @@ export async function removeDirIfEmpty(dir: string): Promise<void> {
   }
 }
 
-/** Existing files in a category folder (basenames), or [] if the folder is absent. */
-export async function listCategoryFiles(slug: string): Promise<string[]> {
+/** Existing files in a service folder (basenames), or [] if the folder is absent. */
+export async function listServiceFiles(slug: string): Promise<string[]> {
   try {
-    return await fs.readdir(categoryDir(slug));
+    return await fs.readdir(serviceDir(slug));
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === "ENOENT") return [];
     throw err;
@@ -92,7 +92,7 @@ export async function nextCoverFilename(
   baseName: string,
   ext: string,
 ): Promise<string> {
-  const files = await listCategoryFiles(slug);
+  const files = await listServiceFiles(slug);
   const re = new RegExp(`^${baseName}-(\\d+)\\.`, "i");
   let max = 0;
   for (const f of files) {

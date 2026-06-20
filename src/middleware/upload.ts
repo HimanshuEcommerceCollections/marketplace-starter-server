@@ -9,7 +9,7 @@ import {
 } from "../config/upload.config";
 
 /**
- * Multipart parser for category asset uploads. Files are buffered in memory
+ * Multipart parser for service asset uploads. Files are buffered in memory
  * (small, <=500KB) so the service can validate the bytes before anything is
  * written to disk. `limits.fileSize` is the cover ceiling; the icon's tighter
  * 50KB limit is enforced in the service. Multer errors (oversized file, too
@@ -27,7 +27,7 @@ const multipart = multer({
 ]);
 
 /** Express middleware: parse `icon` + `covers` multipart fields. */
-export function uploadCategoryAssets(
+export function uploadServiceAssets(
   req: Request,
   res: Response,
   next: NextFunction,
@@ -63,7 +63,7 @@ export function uploadCategoryAssets(
   });
 }
 
-/** Convenience type for the parsed file map produced by uploadCategoryAssets. */
+/** Convenience type for the parsed file map produced by uploadServiceAssets. */
 export type UploadedFiles = {
   [field: string]: Express.Multer.File[] | undefined;
 };

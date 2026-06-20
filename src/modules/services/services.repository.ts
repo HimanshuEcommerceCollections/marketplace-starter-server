@@ -11,22 +11,17 @@ export class ServicesRepository {
   findById(id: string) {
     return prisma.service.findUnique({ where: { id } });
   }
-  /** Detail lookup that also carries the parent category's status, so callers
-   *  can enforce public visibility (services under a non-ACTIVE category). */
-  findByIdWithCategoryStatus(id: string) {
-    return prisma.service.findUnique({
-      where: { id },
-      include: { category: { select: { status: true } } },
-    });
+  findByName(name: string) {
+    return prisma.service.findUnique({ where: { name } });
+  }
+  findBySlug(slug: string) {
+    return prisma.service.findUnique({ where: { slug } });
   }
   create(data: Prisma.ServiceUncheckedCreateInput) {
     return prisma.service.create({ data });
   }
   update(id: string, data: Prisma.ServiceUncheckedUpdateInput) {
     return prisma.service.update({ where: { id }, data });
-  }
-  delete(id: string) {
-    return prisma.service.delete({ where: { id } });
   }
 }
 

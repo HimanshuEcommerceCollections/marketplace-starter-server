@@ -74,23 +74,21 @@ enum LocationMode {
   HYBRID
 }
 
-enum CategoryStatus {
+enum ServiceStatus {
   DRAFT
   ACTIVE
   COMING_SOON
   INACTIVE
 }
 
-enum ConfigInputType {
-  SELECT // single choice from options[]
-  MULTISELECT // 0+ choices from options[]
-  QUANTITY // numeric input; no options[] (not yet supported by the API)
-  TOGGLE // boolean on/off; no options[] (not yet supported by the API)
+enum ConfigSelectionType {
+  SINGLE_SELECT // user must choose exactly one option
+  MULTI_SELECT // user may choose zero or more options
 }
 
-enum ConfigApplies {
-  FLAT // delta applied once, regardless of quantity
-  PER_UNIT // delta scaled by Booking.quantity
+enum ConfigStatus {
+  ACTIVE
+  INACTIVE
 }
 
 enum NotificationType {
@@ -169,35 +167,19 @@ model ServiceProvider {
 // Catalog
 // ────────────────────────────────────────────────────────────────────────────
 
-model ServiceCategory {
-  id          String         @id @default(uuid())
-  name        String         @unique
-  slug        String         @unique
-  description String?
-  basePrice   Int            @default(0) // minor units (cents); app enforces > 0 on write
-  status      CategoryStatus @default(DRAFT)
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
-
-  services Service[]
-
-  @@index([status])
-}
-
 model Service {
-  id              String       @id @default(uuid())
-  name            String
-  slug            String       @unique
+  id              String        @id @default(uuid())
+  name            String        @unique
+  slug            String        @unique
   description     String?
-  categoryId      String
   providerId      String?
   priceAmount     Int // BASE for booking math (= pricing base_price.amount), minor units
-  currency        String       @default("USD")
-  durationMinutes Int          @default(60)
-  locationMode    LocationMode @default(ONSITE) // default/primary mode
-  isActive        Boolean      @default(true)
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
+  currency        String        @default("USD")
+  durationMinutes Int           @default(60)
+  locationMode    LocationMode  @default(ONSITE) // default/primary mode
+  status          ServiceStatus @default(DRAFT)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
 
   // Catalog parity (client services.json). All nullable/defaulted for safe migration.
   pricingRef    String? // client `pricing_ref`; the pricing.v1.json key (id-alignment resolution)
@@ -205,11 +187,9 @@ model Service {
   serviceType   String? // free-form classifier (client `service_type`)
   fromPrice     Int? // client `from_price`; DISPLAY-ONLY "From $X" band, NOT the booking base
   minBooking    Int? // client `min_booking`; hard booking floor (e.g. beauty = 7500)
-  comingSoon    Boolean         @default(false) // client `coming_soon`; gates bookability
-  badges        String[]        @default([]) // client `badges`
-  locationModes LocationMode[]  @default([]) // full set offered (booking picks one)
+  badges        String[]       @default([]) // client `badges`
+  locationModes LocationMode[] @default([]) // full set offered (booking picks one)
 
-  category          ServiceCategory      @relation(fields: [categoryId], references: [id])
   provider          ServiceProvider?     @relation(fields: [providerId], references: [id])
   bookings          Booking[]
   reviews           Review[]
@@ -217,31 +197,25 @@ model Service {
   waitlistEntries   WaitlistEntry[]
   configGroups      ServiceConfigGroup[]
 
-  @@index([categoryId])
   @@index([providerId])
-  @@index([isActive])
+  @@index([status])
 }
 
 /// A configurable dimension of a service (Duration, Session Type, Add-Ons…).
 /// `key` equals the pricing modifier id within services[service.pricingRef]
 /// (id-alignment contract) — carried verbatim from source, never slugged from the label.
+/// A group may only be ACTIVE if it has >= 1 option (enforced at activation).
 model ServiceConfigGroup {
-  id           String          @id @default(uuid())
-  serviceId    String
-  key          String // == pricing modifier id under service.pricingRef
-  label        String
-  inputType    ConfigInputType
-  applies      ConfigApplies   @default(FLAT) // PER_UNIT scales group priceDelta by quantity
-  isRequired   Boolean         @default(false)
-  sortOrder    Int             @default(0)
-  priceDelta   Int? // group-level delta for QUANTITY/TOGGLE (optionless); null for SELECT/MULTISELECT
-  selectMin    Int? // multiselect selection-count bounds (net-new policy)
-  selectMax    Int?
-  quantityMin  Int? // quantity numeric bounds (net-new policy)
-  quantityMax  Int?
-  quantityStep Int?
-  createdAt    DateTime        @default(now())
-  updatedAt    DateTime        @updatedAt
+  id            String              @id @default(uuid())
+  serviceId     String
+  key           String // == pricing modifier id under service.pricingRef
+  label         String
+  selectionType ConfigSelectionType
+  isRequired    Boolean             @default(false)
+  sortOrder     Int                 @default(0)
+  status        ConfigStatus        @default(INACTIVE) // ACTIVE requires >= 1 option
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
 
   service Service               @relation(fields: [serviceId], references: [id], onDelete: Cascade)
   options ServiceConfigOption[]
@@ -251,17 +225,19 @@ model ServiceConfigGroup {
 }
 
 /// A choice within a group (60 min, Hot Stones…). `key` equals the pricing modifier
-/// option id within services[service.pricingRef]. `priceDelta` is signed minor units.
+/// option id within services[service.pricingRef]. `priceModifier` is added to the
+/// service base price when selected (minor units; >= 0 surcharge).
 model ServiceConfigOption {
-  id         String   @id @default(uuid())
-  groupId    String
-  key        String // == pricing modifier option id under service.pricingRef
-  label      String
-  priceDelta Int      @default(0) // SIGNED cents; 0 = no change (MVP validates >= 0)
-  isDefault  Boolean  @default(false)
-  sortOrder  Int      @default(0)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id            String       @id @default(uuid())
+  groupId       String
+  key           String // == pricing modifier option id under service.pricingRef
+  label         String
+  priceModifier Int          @default(0) // surcharge in minor units (cents); 0 = no change
+  description   String?
+  sortOrder     Int          @default(0)
+  status        ConfigStatus @default(ACTIVE)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
 
   group ServiceConfigGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
 

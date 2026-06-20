@@ -1,43 +1,47 @@
 import fs from "fs";
 import path from "path";
 import { env } from "./env";
-import { CATEGORIES_DIR_NAME, DEFAULT_ASSETS_SLUG } from "./upload.config";
+import { SERVICES_DIR_NAME, DEFAULT_ASSETS_SLUG } from "./upload.config";
 
 /**
- * Category presentation assets (a single SVG icon + ordered cover images) are
+ * Service presentation assets (a single SVG icon + ordered cover images) are
  * NOT stored in the database (per product spec). They are managed on the
- * filesystem and indexed by category `slug` in a JSON registry that is read on
+ * filesystem and indexed by service `slug` in a JSON registry that is read on
  * every serialize and rewritten whenever an admin changes assets.
  *
- * Why JSON (not the previous TS module): this registry must be MUTATED and
- * persisted at runtime. A statically-imported `const` is frozen into the
- * compiled bundle and cannot be updated, so a writable store has to be a data
- * file. The path is configurable; it defaults to <cwd>/data/category-assets.json
- * (outside the web-served public/ dir). An in-memory cache keyed on mtime keeps
- * resolves cheap while still picking up out-of-band edits to the file.
+ * Why JSON (not a TS module): this registry must be MUTATED and persisted at
+ * runtime. A statically-imported `const` is frozen into the compiled bundle and
+ * cannot be updated, so a writable store has to be a data file. The path is
+ * configurable; it defaults to <cwd>/data/service-assets.json (outside the
+ * web-served public/ dir). An in-memory cache keyed on mtime keeps resolves
+ * cheap while still picking up out-of-band edits to the file.
+ *
+ * NOTE: distinct from `config/service-assets.ts`, which is the (separate) lucide
+ * icon-NAME map used by the booking-config serializer. This file holds the real
+ * uploaded icon/cover image URLs.
  */
 
-export interface CategoryAssetEntry {
+export interface ServiceImageAssetEntry {
   iconPath?: string;
   coverImages?: string[];
 }
 
-export interface ResolvedCategoryAssets {
+export interface ResolvedServiceImageAssets {
   iconPath: string;
   coverImages: string[];
 }
 
-type Registry = Record<string, CategoryAssetEntry>;
+type Registry = Record<string, ServiceImageAssetEntry>;
 
 /** Shared fallback used when a slug has no (or partial) registry entry. */
-export const DEFAULT_ASSETS: ResolvedCategoryAssets = {
-  iconPath: `/${CATEGORIES_DIR_NAME}/${DEFAULT_ASSETS_SLUG}/icon.svg`,
-  coverImages: [`/${CATEGORIES_DIR_NAME}/${DEFAULT_ASSETS_SLUG}/cover-1.svg`],
+export const DEFAULT_ASSETS: ResolvedServiceImageAssets = {
+  iconPath: `/${SERVICES_DIR_NAME}/${DEFAULT_ASSETS_SLUG}/icon.svg`,
+  coverImages: [`/${SERVICES_DIR_NAME}/${DEFAULT_ASSETS_SLUG}/cover-1.svg`],
 };
 
-const REGISTRY_FILE = env.CATEGORY_ASSETS_FILE
-  ? path.resolve(env.CATEGORY_ASSETS_FILE)
-  : path.resolve(process.cwd(), "data", "category-assets.json");
+const REGISTRY_FILE = env.SERVICE_ASSETS_FILE
+  ? path.resolve(env.SERVICE_ASSETS_FILE)
+  : path.resolve(process.cwd(), "data", "service-assets.json");
 
 let cache: { mtimeMs: number; data: Registry } | null = null;
 
@@ -51,7 +55,7 @@ function readRegistry(): Registry {
     return data;
   } catch {
     // Missing file (first run) or malformed JSON → behave as an empty registry
-    // so category serialization always succeeds with default assets.
+    // so service serialization always succeeds with default assets.
     return {};
   }
 }
@@ -66,16 +70,16 @@ function writeRegistry(data: Registry): void {
 }
 
 /** Raw registry entry for a slug (no fallback), or undefined if none. */
-export function getCategoryAssetEntry(slug: string): CategoryAssetEntry | undefined {
+export function getServiceImageAssetEntry(slug: string): ServiceImageAssetEntry | undefined {
   return readRegistry()[slug];
 }
 
 /**
- * Resolve a slug's assets for API responses. Field-level fallback: a category
+ * Resolve a slug's assets for API responses. Field-level fallback: a service
  * with covers but no icon still gets the default icon, and vice versa.
  * Priority per field: registry entry → DEFAULT_ASSETS.
  */
-export function resolveCategoryAssets(slug: string): ResolvedCategoryAssets {
+export function resolveServiceImageAssets(slug: string): ResolvedServiceImageAssets {
   const entry = readRegistry()[slug];
   return {
     iconPath: entry?.iconPath ?? DEFAULT_ASSETS.iconPath,
@@ -87,9 +91,9 @@ export function resolveCategoryAssets(slug: string): ResolvedCategoryAssets {
 }
 
 /** Create/overwrite a slug's registry entry. Empty entries are pruned. */
-export function upsertCategoryAssetEntry(
+export function upsertServiceImageAssetEntry(
   slug: string,
-  entry: CategoryAssetEntry,
+  entry: ServiceImageAssetEntry,
 ): void {
   const data = readRegistry();
   const hasIcon = Boolean(entry.iconPath);
@@ -106,7 +110,7 @@ export function upsertCategoryAssetEntry(
 }
 
 /** Remove a slug's registry entry entirely. */
-export function removeCategoryAssetEntry(slug: string): void {
+export function removeServiceImageAssetEntry(slug: string): void {
   const data = readRegistry();
   if (slug in data) {
     delete data[slug];

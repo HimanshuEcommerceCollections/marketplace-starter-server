@@ -4,7 +4,7 @@ import { bookingsRepository } from "./bookings.repository";
 import { servicesService } from "../services/services.service";
 import { ApiError } from "../../utils/api-error";
 import { buildPagination, buildMeta } from "../../utils/pagination";
-import { BookingStatus } from "../../enums";
+import { BookingStatus, ServiceStatus } from "../../enums";
 import type {
   CreateBookingDto,
   ListBookingsQuery,
@@ -22,7 +22,7 @@ export class BookingsService {
   /** Customer books a service; price/currency are snapshotted from the service. */
   async create(customerId: string, dto: CreateBookingDto) {
     const service = await servicesService.getById(dto.serviceId);
-    if (!service.isActive) {
+    if (service.status !== ServiceStatus.ACTIVE) {
       throw ApiError.badRequest("This service is not currently bookable");
     }
     if (dto.scheduledEnd <= dto.scheduledStart) {

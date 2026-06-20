@@ -1,21 +1,21 @@
-import { categoriesRepository } from "../categories.repository";
+import { servicesRepository } from "../services.repository";
 import { ApiError } from "../../../utils/api-error";
 import { logger } from "../../../utils/logger";
 import {
-  resolveCategoryAssets,
-  getCategoryAssetEntry,
-  upsertCategoryAssetEntry,
-  removeCategoryAssetEntry,
-} from "../../../config/category-assets";
+  resolveServiceImageAssets,
+  getServiceImageAssetEntry,
+  upsertServiceImageAssetEntry,
+  removeServiceImageAssetEntry,
+} from "../../../config/service-image-assets";
 import {
   COVER_CONFIG,
   ICON_CONFIG,
   formatBytes,
 } from "../../../config/upload.config";
 import {
-  categoryDir,
+  serviceDir,
   publicUrl,
-  saveCategoryFile,
+  saveServiceFile,
   deleteByUrl,
   removeDirIfEmpty,
   nextCoverFilename,
@@ -30,9 +30,9 @@ import {
 } from "../../../utils/file-validation";
 import type {
   ApplyAssetsInput,
-  CategoryAssetsResponse,
+  ServiceAssetsResponse,
   UploadedFile,
-} from "./category-assets.types";
+} from "./service-assets.types";
 
 /** Asset management view: actual uploaded state (null/[] when nothing uploaded). */
 export interface CurrentAssets {
@@ -45,16 +45,16 @@ function basename(value: string): string {
   return value.split("/").pop() ?? value;
 }
 
-export class CategoryAssetsService {
-  /** 404 if no category owns this slug — assets are always scoped to a category. */
-  private async assertCategoryExists(slug: string): Promise<void> {
-    const category = await categoriesRepository.findBySlug(slug);
-    if (!category) throw ApiError.notFound("Category not found");
+export class ServiceAssetsService {
+  /** 404 if no service owns this slug — assets are always scoped to a service. */
+  private async assertServiceExists(slug: string): Promise<void> {
+    const service = await servicesRepository.findBySlug(slug);
+    if (!service) throw ApiError.notFound("Service not found");
   }
 
   /** Raw uploaded state from the registry (no default fallback). */
   private currentAssets(slug: string): CurrentAssets {
-    const entry = getCategoryAssetEntry(slug);
+    const entry = getServiceImageAssetEntry(slug);
     return {
       iconPath: entry?.iconPath ?? null,
       coverImages: entry?.coverImages ? [...entry.coverImages] : [],
@@ -114,15 +114,15 @@ export class CategoryAssetsService {
     return type === "jpeg" ? ".jpg" : `.${type}`;
   }
 
-  /** GET — current uploaded assets for a category (management view). */
+  /** GET — current uploaded assets for a service (management view). */
   async getAssets(slug: string): Promise<CurrentAssets> {
-    await this.assertCategoryExists(slug);
+    await this.assertServiceExists(slug);
     return this.currentAssets(slug);
   }
 
   /** Public-facing resolved assets (with default fallback) for a slug. */
-  resolvePublic(slug: string): CategoryAssetsResponse {
-    return resolveCategoryAssets(slug);
+  resolvePublic(slug: string): ServiceAssetsResponse {
+    return resolveServiceImageAssets(slug);
   }
 
   /**
@@ -131,7 +131,7 @@ export class CategoryAssetsService {
    * pass over the registry. Files are validated before any disk write.
    */
   async applyChanges(slug: string, input: ApplyAssetsInput): Promise<CurrentAssets> {
-    await this.assertCategoryExists(slug);
+    await this.assertServiceExists(slug);
 
     // Pre-validate everything up front so a bad file aborts before we touch disk.
     if (input.icon) this.validateIcon(input.icon);
@@ -158,11 +158,11 @@ export class CategoryAssetsService {
     let covers = [...current.coverImages];
 
     // 1. Replace icon, or remove it when removeIcon is set and no replacement.
-    //    The icon filename is always icon.svg, so saveCategoryFile overwrites in
+    //    The icon filename is always icon.svg, so saveServiceFile overwrites in
     //    place — no delete-first step (which would open a window where the icon
     //    is missing if the subsequent write failed).
     if (input.icon) {
-      await saveCategoryFile(slug, ICON_CONFIG.filename, input.icon.buffer);
+      await saveServiceFile(slug, ICON_CONFIG.filename, input.icon.buffer);
       iconPath = publicUrl(slug, ICON_CONFIG.filename);
     } else if (input.removeIcon && iconPath) {
       await deleteByUrl(iconPath);
@@ -174,7 +174,7 @@ export class CategoryAssetsService {
       for (const id of input.removeCovers) {
         const target = covers.find((c) => basename(c) === basename(id));
         if (!target) {
-          throw ApiError.badRequest(`Cover "${id}" is not part of this category`);
+          throw ApiError.badRequest(`Cover "${id}" is not part of this service`);
         }
         await deleteByUrl(target);
         covers = covers.filter((c) => c !== target);
@@ -185,7 +185,7 @@ export class CategoryAssetsService {
     if (input.covers?.length) {
       if (covers.length + input.covers.length > COVER_CONFIG.maxCount) {
         throw ApiError.badRequest(
-          `A category may have at most ${COVER_CONFIG.maxCount} cover images`,
+          `A service may have at most ${COVER_CONFIG.maxCount} cover images`,
         );
       }
       for (let i = 0; i < input.covers.length; i++) {
@@ -194,7 +194,7 @@ export class CategoryAssetsService {
           COVER_CONFIG.baseName,
           coverExts[i],
         );
-        await saveCategoryFile(slug, filename, input.covers[i].buffer);
+        await saveServiceFile(slug, filename, input.covers[i].buffer);
         covers.push(publicUrl(slug, filename));
       }
     }
@@ -204,9 +204,9 @@ export class CategoryAssetsService {
       covers = this.applyOrder(covers, input.order);
     }
 
-    upsertCategoryAssetEntry(slug, { iconPath: iconPath ?? undefined, coverImages: covers });
-    await removeDirIfEmpty(categoryDir(slug));
-    logger.info("Category assets updated", { slug, icon: Boolean(iconPath), covers: covers.length });
+    upsertServiceImageAssetEntry(slug, { iconPath: iconPath ?? undefined, coverImages: covers });
+    await removeDirIfEmpty(serviceDir(slug));
+    logger.info("Service assets updated", { slug, icon: Boolean(iconPath), covers: covers.length });
     return { iconPath, coverImages: covers };
   }
 
@@ -231,31 +231,31 @@ export class CategoryAssetsService {
 
   /** DELETE single cover by its stored filename (e.g. "cover-2.webp"). */
   async deleteCover(slug: string, coverId: string): Promise<CurrentAssets> {
-    await this.assertCategoryExists(slug);
+    await this.assertServiceExists(slug);
     const current = this.currentAssets(slug);
     const target = current.coverImages.find((c) => basename(c) === coverId);
     if (!target) throw ApiError.notFound("Cover image not found");
 
     await deleteByUrl(target);
     const covers = current.coverImages.filter((c) => c !== target);
-    upsertCategoryAssetEntry(slug, {
+    upsertServiceImageAssetEntry(slug, {
       iconPath: current.iconPath ?? undefined,
       coverImages: covers,
     });
-    await removeDirIfEmpty(categoryDir(slug));
-    logger.info("Category cover deleted", { slug, coverId });
+    await removeDirIfEmpty(serviceDir(slug));
+    logger.info("Service cover deleted", { slug, coverId });
     return { iconPath: current.iconPath, coverImages: covers };
   }
 
   /** PATCH cover order. */
   async reorderCovers(slug: string, coverImages: string[]): Promise<CurrentAssets> {
-    await this.assertCategoryExists(slug);
+    await this.assertServiceExists(slug);
     const current = this.currentAssets(slug);
     if (current.coverImages.length === 0) {
-      throw ApiError.badRequest("This category has no cover images to reorder");
+      throw ApiError.badRequest("This service has no cover images to reorder");
     }
     const reordered = this.applyOrder(current.coverImages, coverImages);
-    upsertCategoryAssetEntry(slug, {
+    upsertServiceImageAssetEntry(slug, {
       iconPath: current.iconPath ?? undefined,
       coverImages: reordered,
     });
@@ -264,15 +264,15 @@ export class CategoryAssetsService {
 
   /** DELETE all assets: remove every file, drop the registry entry and folder. */
   async deleteAll(slug: string): Promise<CurrentAssets> {
-    await this.assertCategoryExists(slug);
+    await this.assertServiceExists(slug);
     const current = this.currentAssets(slug);
     if (current.iconPath) await deleteByUrl(current.iconPath);
     for (const cover of current.coverImages) await deleteByUrl(cover);
-    removeCategoryAssetEntry(slug);
-    await removeDirIfEmpty(categoryDir(slug));
-    logger.info("Category assets deleted", { slug });
+    removeServiceImageAssetEntry(slug);
+    await removeDirIfEmpty(serviceDir(slug));
+    logger.info("Service assets deleted", { slug });
     return { iconPath: null, coverImages: [] };
   }
 }
 
-export const categoryAssetsService = new CategoryAssetsService();
+export const serviceAssetsService = new ServiceAssetsService();

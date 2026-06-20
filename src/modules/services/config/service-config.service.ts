@@ -3,7 +3,7 @@ import { serviceConfigRepository } from "./service-config.repository";
 import { servicesService } from "../services.service";
 import { ApiError } from "../../../utils/api-error";
 import { resolveServiceAssets } from "../../../config/service-assets";
-import { ConfigInputType } from "../../../enums";
+import { ConfigStatus } from "../../../enums";
 import type {
   CreateConfigGroupDto,
   UpdateConfigGroupDto,
@@ -17,10 +17,6 @@ import type {
 type GroupWithOptions = Prisma.ServiceConfigGroupGetPayload<{ include: { options: true } }>;
 type ServiceRow = Awaited<ReturnType<typeof servicesService.getById>>;
 
-/** Input types that own an options[] list. QUANTITY/TOGGLE are modeled but not yet
- *  accepted by the API (design decision — no real data uses them). */
-const OPTION_BEARING: ConfigInputType[] = [ConfigInputType.SELECT, ConfigInputType.MULTISELECT];
-
 export class ServiceConfigService {
   // ── serialization ────────────────────────────────────────────────────────
   private serializeOption(o: ServiceConfigOption): ConfigOptionResponse {
@@ -28,9 +24,10 @@ export class ServiceConfigService {
       id: o.id,
       key: o.key,
       label: o.label,
-      priceDelta: o.priceDelta,
-      isDefault: o.isDefault,
+      priceModifier: o.priceModifier,
+      description: o.description,
       sortOrder: o.sortOrder,
+      status: o.status,
       createdAt: o.createdAt,
       updatedAt: o.updatedAt,
     };
@@ -42,16 +39,10 @@ export class ServiceConfigService {
       serviceId: g.serviceId,
       key: g.key,
       label: g.label,
-      inputType: g.inputType,
-      applies: g.applies,
+      selectionType: g.selectionType,
       isRequired: g.isRequired,
       sortOrder: g.sortOrder,
-      priceDelta: g.priceDelta,
-      selectMin: g.selectMin,
-      selectMax: g.selectMax,
-      quantityMin: g.quantityMin,
-      quantityMax: g.quantityMax,
-      quantityStep: g.quantityStep,
+      status: g.status,
       options: g.options.map((o) => this.serializeOption(o)),
       createdAt: g.createdAt,
       updatedAt: g.updatedAt,
@@ -70,7 +61,6 @@ export class ServiceConfigService {
       pricingRef: svc.pricingRef,
       summary: svc.summary,
       description: svc.description,
-      categoryId: svc.categoryId,
       priceAmount: svc.priceAmount,
       fromPrice: svc.fromPrice,
       minBooking: svc.minBooking,
@@ -79,10 +69,9 @@ export class ServiceConfigService {
       locationMode: svc.locationMode,
       locationModes: svc.locationModes,
       serviceType: svc.serviceType,
-      comingSoon: svc.comingSoon,
       badges: svc.badges,
       iconPath,
-      isActive: svc.isActive,
+      status: svc.status,
       configGroups: groups.map((g) => this.serializeGroup(g)),
       createdAt: svc.createdAt,
       updatedAt: svc.updatedAt,
@@ -111,14 +100,6 @@ export class ServiceConfigService {
     return option;
   }
 
-  private assertSupportedInput(inputType: ConfigInputType) {
-    if (!OPTION_BEARING.includes(inputType)) {
-      throw ApiError.badRequest(
-        "QUANTITY and TOGGLE input types are not supported yet; use SELECT or MULTISELECT",
-      );
-    }
-  }
-
   // ── reads ────────────────────────────────────────────────────────────────
   async listGroups(serviceId: string, staff = false): Promise<ConfigGroupResponse[]> {
     await this.ensureService(serviceId, staff);
@@ -138,13 +119,14 @@ export class ServiceConfigService {
   // ── group mutations (staff) ────────────────────────────────────────────────
   async createGroup(serviceId: string, dto: CreateConfigGroupDto): Promise<ConfigGroupResponse> {
     await this.ensureService(serviceId);
-    this.assertSupportedInput(dto.inputType);
 
     const existing = await serviceConfigRepository.findGroupByServiceAndKey(serviceId, dto.key);
     if (existing) {
       throw ApiError.conflict("A config group with this key already exists for this service");
     }
 
+    // New groups start INACTIVE (schema default) — they must gain >= 1 option
+    // before they can be activated.
     const created = await serviceConfigRepository.createGroup({ serviceId, ...dto });
     const full = await serviceConfigRepository.findGroupWithOptions(created.id);
     return this.serializeGroup(full!);
@@ -158,11 +140,20 @@ export class ServiceConfigService {
     await this.ensureService(serviceId);
     const group = await this.ensureGroup(serviceId, groupId);
 
-    if (dto.inputType !== undefined) this.assertSupportedInput(dto.inputType);
     if (dto.key !== undefined && dto.key !== group.key) {
       const clash = await serviceConfigRepository.findGroupByServiceAndKey(serviceId, dto.key);
       if (clash) {
         throw ApiError.conflict("A config group with this key already exists for this service");
+      }
+    }
+
+    // A group may only be ACTIVE if it has >= 1 option.
+    if (dto.status === ConfigStatus.ACTIVE) {
+      const full = await serviceConfigRepository.findGroupWithOptions(groupId);
+      if (!full || full.options.length === 0) {
+        throw ApiError.badRequest(
+          "A config group must have at least one option before it can be activated",
+        );
       }
     }
 
@@ -177,6 +168,16 @@ export class ServiceConfigService {
     await serviceConfigRepository.deleteGroup(groupId); // cascades to options
   }
 
+  /** Reorder all groups for a service; `groupIds` must be exactly the current set. */
+  async reorderGroups(serviceId: string, groupIds: string[]): Promise<ConfigGroupResponse[]> {
+    await this.ensureService(serviceId);
+    const current = await serviceConfigRepository.findGroupsByService(serviceId);
+    this.assertSameSet(current.map((g) => g.id), groupIds, "group");
+    await serviceConfigRepository.reorderGroups(groupIds);
+    const groups = await serviceConfigRepository.findGroupsByService(serviceId);
+    return groups.map((g) => this.serializeGroup(g));
+  }
+
   // ── option mutations (staff) ───────────────────────────────────────────────
   async createOption(
     serviceId: string,
@@ -184,19 +185,11 @@ export class ServiceConfigService {
     dto: CreateConfigOptionDto,
   ): Promise<ConfigOptionResponse> {
     await this.ensureService(serviceId);
-    const group = await this.ensureGroup(serviceId, groupId);
-    if (!OPTION_BEARING.includes(group.inputType)) {
-      throw ApiError.badRequest("This group's input type does not support options");
-    }
+    await this.ensureGroup(serviceId, groupId);
 
     const existing = await serviceConfigRepository.findOptionByGroupAndKey(groupId, dto.key);
     if (existing) {
       throw ApiError.conflict("A config option with this key already exists in this group");
-    }
-
-    // "At most one default per SELECT": clear siblings before setting a new default.
-    if (dto.isDefault && group.inputType === ConfigInputType.SELECT) {
-      await serviceConfigRepository.clearDefaults(groupId);
     }
 
     const created = await serviceConfigRepository.createOption({ groupId, ...dto });
@@ -210,7 +203,7 @@ export class ServiceConfigService {
     dto: UpdateConfigOptionDto,
   ): Promise<ConfigOptionResponse> {
     await this.ensureService(serviceId);
-    const group = await this.ensureGroup(serviceId, groupId);
+    await this.ensureGroup(serviceId, groupId);
     const option = await this.ensureOption(groupId, optionId);
 
     if (dto.key !== undefined && dto.key !== option.key) {
@@ -220,19 +213,57 @@ export class ServiceConfigService {
       }
     }
 
-    if (dto.isDefault === true && group.inputType === ConfigInputType.SELECT) {
-      await serviceConfigRepository.clearDefaults(groupId);
-    }
-
     const updated = await serviceConfigRepository.updateOption(optionId, dto);
     return this.serializeOption(updated);
   }
 
   async deleteOption(serviceId: string, groupId: string, optionId: string): Promise<void> {
     await this.ensureService(serviceId);
-    await this.ensureGroup(serviceId, groupId);
+    const group = await this.ensureGroup(serviceId, groupId);
     await this.ensureOption(groupId, optionId);
+
+    // Deleting the last option of an ACTIVE group would break the
+    // "ACTIVE ⟹ >= 1 option" invariant — block it (deactivate the group first).
+    if (group.status === ConfigStatus.ACTIVE) {
+      const full = await serviceConfigRepository.findGroupWithOptions(groupId);
+      if (full && full.options.length <= 1) {
+        throw ApiError.badRequest(
+          "Cannot delete the last option of an active group; deactivate the group first",
+        );
+      }
+    }
+
     await serviceConfigRepository.deleteOption(optionId);
+  }
+
+  /** Reorder options within a group; `optionIds` must be exactly the current set. */
+  async reorderOptions(
+    serviceId: string,
+    groupId: string,
+    optionIds: string[],
+  ): Promise<ConfigGroupResponse> {
+    await this.ensureService(serviceId);
+    await this.ensureGroup(serviceId, groupId);
+    const full = await serviceConfigRepository.findGroupWithOptions(groupId);
+    this.assertSameSet((full?.options ?? []).map((o) => o.id), optionIds, "option");
+    await serviceConfigRepository.reorderOptions(optionIds);
+    const updated = await serviceConfigRepository.findGroupWithOptions(groupId);
+    return this.serializeGroup(updated!);
+  }
+
+  /** A reorder list must be a permutation of the current set (no adds/drops). */
+  private assertSameSet(currentIds: string[], providedIds: string[], noun: string): void {
+    const current = new Set(currentIds);
+    const provided = new Set(providedIds);
+    if (
+      providedIds.length !== currentIds.length ||
+      provided.size !== providedIds.length ||
+      ![...provided].every((id) => current.has(id))
+    ) {
+      throw ApiError.badRequest(
+        `The reorder list must contain exactly the current ${noun} ids, each once`,
+      );
+    }
   }
 }
 
