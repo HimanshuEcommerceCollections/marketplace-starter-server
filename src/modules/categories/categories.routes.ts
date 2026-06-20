@@ -11,9 +11,15 @@ import {
   listCategoriesSchema,
   categoryIdSchema,
 } from "./categories.validation";
+import { categoryAssetsRouter } from "./assets/category-assets.routes";
 import { UserRole } from "../../enums";
 
 export const categoriesRouter = Router();
+
+// Asset management (icon + cover images), scoped by slug. Mounted before the
+// /:id routes is unnecessary (distinct path shape), but kept near the top so the
+// asset surface is easy to find.
+categoriesRouter.use("/:slug/assets", categoryAssetsRouter);
 
 // Public list — role-aware: anonymous callers see ACTIVE only; staff see all.
 categoriesRouter.get(
