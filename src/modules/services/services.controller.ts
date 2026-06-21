@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import { servicesService } from "./services.service";
 import { sendSuccess } from "../../utils/api-response";
 import { HttpStatus } from "../../constants/http-status";
+import { isStaffRole } from "../../constants/roles";
 import type { ServiceStatus } from "../../enums";
 import type {
   CreateServiceDto,
@@ -20,6 +21,11 @@ export class ServicesController {
 
   getById = async (req: Request, res: Response) => {
     sendSuccess(res, await servicesService.getDetails(req.params.id));
+  };
+
+  getBySlug = async (req: Request, res: Response) => {
+    const staff = !!req.user && isStaffRole(req.user.role);
+    sendSuccess(res, await servicesService.getDetailsBySlug(req.params.slug, staff));
   };
 
   create = async (req: Request, res: Response) => {

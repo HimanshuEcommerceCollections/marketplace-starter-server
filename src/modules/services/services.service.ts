@@ -132,6 +132,19 @@ export class ServicesService {
     return this.serialize(service);
   }
 
+  /**
+   * Public single-service lookup by slug (for the customer detail/booking pages).
+   * Non-staff only see publicly-visible services (ACTIVE/COMING_SOON).
+   */
+  async getDetailsBySlug(slug: string, staff = false): Promise<ServiceResponse> {
+    const service = await servicesRepository.findBySlug(slug);
+    if (!service) throw ApiError.notFound("Service not found");
+    if (!staff && !PUBLIC_STATUSES.includes(service.status)) {
+      throw ApiError.notFound("Service not found");
+    }
+    return this.serialize(service);
+  }
+
   /** Create a service. Defaults to DRAFT; `publish: true` creates it ACTIVE. */
   async create(dto: CreateServiceDto): Promise<ServiceResponse> {
     await this.assertNameAvailable(dto.name);

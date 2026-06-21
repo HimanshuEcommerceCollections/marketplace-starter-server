@@ -12,6 +12,7 @@ import {
   updateServiceStatusSchema,
   listServicesSchema,
   serviceIdSchema,
+  serviceSlugParamSchema,
 } from "./services.validation";
 import { UserRole } from "../../enums";
 
@@ -33,6 +34,15 @@ servicesRouter.get(
   optionalAuthenticate,
   validate({ query: listServicesSchema }),
   asyncHandler(servicesController.list),
+);
+
+// Public single-service lookup by slug (customer detail/booking pages).
+// Registered before "/:id" — distinct 2-segment path, but kept here for clarity.
+servicesRouter.get(
+  "/by-slug/:slug",
+  optionalAuthenticate,
+  validate({ params: serviceSlugParamSchema }),
+  asyncHandler(servicesController.getBySlug),
 );
 
 // Management (staff) — serialized details.

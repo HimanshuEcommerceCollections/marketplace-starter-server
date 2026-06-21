@@ -62,3 +62,13 @@ export const updateServiceStatusSchema = z.object({
 });
 
 export const serviceIdSchema = z.object({ id: z.string().uuid() });
+
+/** GET /services/by-slug/:slug — public single-service lookup by slug. */
+export const serviceSlugParamSchema = z.object({
+  slug: z
+    .string()
+    .trim()
+    .min(2)
+    .max(80)
+    .regex(slugRegex, "Invalid service slug"),
+});

@@ -1,4 +1,5 @@
 import type { z } from "zod";
+import type { BookingStatus } from "@prisma/client";
 import type {
   createBookingSchema,
   listBookingsSchema,
@@ -13,4 +14,27 @@ export type UpdateBookingStatusDto = z.infer<typeof updateBookingStatusSchema>;
 export interface BookingRequester {
   id: string;
   isStaff: boolean;
+}
+
+/** Serialized booking returned by the API (DB row + joined service name/slug).
+ *  Date fields are ISO 8601 strings (the JSON wire format the client consumes). */
+export interface BookingResponse {
+  id: string;
+  reference: string;
+  status: BookingStatus;
+  serviceName: string;
+  serviceSlug: string;
+  scheduledStart: string;
+  scheduledEnd: string;
+  priceAmount: number;
+  currency: string;
+  locationMode: string;
+  notes: string | null;
+  contactName: string | null;
+  contactEmail: string | null;
+  contactPhone: string | null;
+  address: string | null;
+  schedulePreferences: unknown;
+  selections: unknown;
+  createdAt: string;
 }

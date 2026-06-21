@@ -13,7 +13,7 @@ import type {
 export class ReviewsService {
   /** A customer can review their own completed booking exactly once. */
   async create(authorId: string, dto: CreateReviewDto) {
-    const booking = await bookingsService.getById(dto.bookingId);
+    const booking = await bookingsService.getEntity(dto.bookingId);
     if (booking.customerId !== authorId) {
       throw ApiError.forbidden("You can only review your own bookings");
     }
