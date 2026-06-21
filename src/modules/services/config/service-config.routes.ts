@@ -11,6 +11,7 @@ import {
   updateConfigOptionSchema,
   reorderGroupsSchema,
   reorderOptionsSchema,
+  priceQuerySchema,
   serviceParamsSchema,
   groupParamsSchema,
   optionParamsSchema,
@@ -32,6 +33,14 @@ serviceConfigRouter.get(
   optionalAuthenticate,
   validate({ params: serviceParamsSchema }),
   asyncHandler(serviceConfigController.listGroups),
+);
+
+// Price quote (public, role-aware): base + selected option modifiers.
+serviceConfigRouter.post(
+  "/price",
+  optionalAuthenticate,
+  validate({ params: serviceParamsSchema, body: priceQuerySchema }),
+  asyncHandler(serviceConfigController.quotePrice),
 );
 
 // ── Group management (staff: admin + coordinator) ─────────────────────────────

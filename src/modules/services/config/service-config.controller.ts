@@ -10,6 +10,7 @@ import type {
   UpdateConfigOptionDto,
   ReorderGroupsDto,
   ReorderOptionsDto,
+  PriceQuoteDto,
 } from "./service-config.types";
 
 export class ServiceConfigController {
@@ -24,6 +25,14 @@ export class ServiceConfigController {
     const staff = !!req.user && isStaffRole(req.user.role);
     const data = await serviceConfigService.listGroups(req.params.serviceId, staff);
     sendSuccess(res, data, "Config groups fetched");
+  };
+
+  // Price quote for a set of selected options ("Option A": base + modifiers).
+  quotePrice = async (req: Request, res: Response) => {
+    const staff = !!req.user && isStaffRole(req.user.role);
+    const { optionIds } = req.body as PriceQuoteDto;
+    const quote = await serviceConfigService.quotePrice(req.params.serviceId, optionIds, staff);
+    sendSuccess(res, quote, "Price quoted");
   };
 
   // Group mutations (staff).

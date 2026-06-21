@@ -7,6 +7,7 @@ import type {
   updateConfigOptionSchema,
   reorderGroupsSchema,
   reorderOptionsSchema,
+  priceQuerySchema,
 } from "./service-config.validation";
 
 export type CreateConfigGroupDto = z.infer<typeof createConfigGroupSchema>;
@@ -15,6 +16,26 @@ export type CreateConfigOptionDto = z.infer<typeof createConfigOptionSchema>;
 export type UpdateConfigOptionDto = z.infer<typeof updateConfigOptionSchema>;
 export type ReorderGroupsDto = z.infer<typeof reorderGroupsSchema>;
 export type ReorderOptionsDto = z.infer<typeof reorderOptionsSchema>;
+export type PriceQuoteDto = z.infer<typeof priceQuerySchema>;
+
+/** One selected option's contribution to a price quote (also the booking snapshot shape). */
+export interface PriceLineItem {
+  groupId: string;
+  groupLabel: string;
+  optionId: string;
+  optionKey: string;
+  optionLabel: string;
+  priceModifier: number; // minor units (cents)
+}
+
+/** "Option A" price breakdown: base + the modifiers of the selected options. */
+export interface PriceQuoteResponse {
+  serviceId: string;
+  currency: string;
+  basePrice: number; // minor units (cents)
+  lineItems: PriceLineItem[];
+  total: number; // basePrice + sum(lineItems.priceModifier)
+}
 
 /** A choice within a group (serialized API contract). */
 export interface ConfigOptionResponse {

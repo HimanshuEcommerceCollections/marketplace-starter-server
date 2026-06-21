@@ -78,6 +78,11 @@ export const reorderOptionsSchema = z.object({
   optionIds: z.array(z.string().uuid()).min(1, "Provide at least one option id"),
 });
 
+/** POST /price — the option ids a customer has selected (may be empty). */
+export const priceQuerySchema = z.object({
+  optionIds: z.array(z.string().uuid()).default([]),
+});
+
 // Param schemas. mergeParams surfaces all of serviceId/groupId/optionId; each schema MUST
 // list every param present on its route (validate replaces req.params with the parsed object).
 export const serviceParamsSchema = z.object({ serviceId: z.string().uuid() });

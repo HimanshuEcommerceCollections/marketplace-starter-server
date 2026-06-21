@@ -7,6 +7,8 @@ export const createBookingSchema = z.object({
   scheduledEnd: z.coerce.date(),
   locationMode: z.nativeEnum(LocationMode).optional(),
   notes: z.string().max(2000).optional(),
+  // Selected configuration option ids; price = base + their modifiers.
+  optionIds: z.array(z.string().uuid()).optional(),
 });
 
 export const listBookingsSchema = z.object({

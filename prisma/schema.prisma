@@ -262,6 +262,9 @@ model Booking {
   currency       String        @default("USD")
   locationMode   LocationMode  @default(ONSITE)
   notes          String?
+  // Immutable snapshot of the chosen config options (PriceLineItem[]) at booking
+  // time; priceAmount = service base + sum of these modifiers ("Option A").
+  selections     Json?
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
