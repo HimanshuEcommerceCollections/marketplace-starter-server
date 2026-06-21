@@ -11,7 +11,12 @@ import type {
   ListBookingsQuery,
   UpdateBookingStatusDto,
   BookingRequester,
+  BookingResponse,
 } from "./bookings.types";
+
+type BookingWithService = Prisma.BookingGetPayload<{
+  include: { service: { select: { name: true; slug: true } } };
+}>;
 
 function generateReference(): string {
   const time = Date.now().toString(36).toUpperCase();
@@ -46,9 +51,41 @@ export class BookingsService {
       scheduledStart: dto.scheduledStart,
       scheduledEnd: dto.scheduledEnd,
       notes: dto.notes,
+      // Persisted customer details from the "Details" step.
+      contactName: dto.contact?.name,
+      contactEmail: dto.contact?.email,
+      contactPhone: dto.contact?.phone,
+      address: dto.address,
+      ...(dto.schedulePreferences
+        ? { schedulePreferences: dto.schedulePreferences as unknown as Prisma.InputJsonValue }
+        : {}),
       selections: quote.lineItems as unknown as Prisma.InputJsonValue,
       status: BookingStatus.PENDING,
     });
+  }
+
+  /** DB row (with joined service) → API response shape. */
+  private serialize(b: BookingWithService): BookingResponse {
+    return {
+      id: b.id,
+      reference: b.reference,
+      status: b.status,
+      serviceName: b.service.name,
+      serviceSlug: b.service.slug,
+      scheduledStart: b.scheduledStart.toISOString(),
+      scheduledEnd: b.scheduledEnd.toISOString(),
+      priceAmount: b.priceAmount,
+      currency: b.currency,
+      locationMode: b.locationMode,
+      notes: b.notes,
+      contactName: b.contactName,
+      contactEmail: b.contactEmail,
+      contactPhone: b.contactPhone,
+      address: b.address,
+      schedulePreferences: b.schedulePreferences,
+      selections: b.selections,
+      createdAt: b.createdAt.toISOString(),
+    };
   }
 
   async list(query: ListBookingsQuery, scope?: { customerId?: string }) {
@@ -58,14 +95,26 @@ export class BookingsService {
       ...(scope?.customerId ? { customerId: scope.customerId } : {}),
     };
     const [items, total] = await Promise.all([
-      bookingsRepository.findMany({ where, skip, take, orderBy: { scheduledStart: "desc" } }),
+      bookingsRepository.findManyWithService({
+        where,
+        skip,
+        take,
+        orderBy: { createdAt: "desc" },
+      }),
       bookingsRepository.count(where),
     ]);
-    return { items, meta: buildMeta(page, limit, total) };
+    return {
+      items: (items as BookingWithService[]).map((b) => this.serialize(b)),
+      meta: buildMeta(page, limit, total),
+    };
   }
 
-  async getById(id: string, requester?: BookingRequester) {
-    const booking = await bookingsRepository.findById(id);
+  /** Fetch a booking (with service) enforcing ownership for non-staff callers. */
+  private async findOwned(
+    id: string,
+    requester?: BookingRequester,
+  ): Promise<BookingWithService> {
+    const booking = await bookingsRepository.findByIdWithService(id);
     if (!booking) throw ApiError.notFound("Booking not found");
     if (requester && !requester.isStaff && booking.customerId !== requester.id) {
       throw ApiError.forbidden("You cannot access this booking");
@@ -73,17 +122,34 @@ export class BookingsService {
     return booking;
   }
 
+  async getById(id: string, requester?: BookingRequester): Promise<BookingResponse> {
+    return this.serialize(await this.findOwned(id, requester));
+  }
+
+  /** Raw booking entity (with service) for internal modules; ownership-checked. */
+  getEntity(id: string, requester?: BookingRequester): Promise<BookingWithService> {
+    return this.findOwned(id, requester);
+  }
+
   async updateStatus(id: string, dto: UpdateBookingStatusDto) {
-    await this.getById(id);
-    return bookingsRepository.update(id, { status: dto.status });
+    const booking = await this.findOwned(id);
+    await bookingsRepository.update(id, { status: dto.status });
+    return this.serialize(await this.refetch(booking.id));
   }
 
   async cancel(id: string, requester: BookingRequester) {
-    const booking = await this.getById(id, requester);
+    const booking = await this.findOwned(id, requester);
     if (booking.status === BookingStatus.CANCELLED) {
       throw ApiError.badRequest("Booking is already cancelled");
     }
-    return bookingsRepository.update(id, { status: BookingStatus.CANCELLED });
+    await bookingsRepository.update(id, { status: BookingStatus.CANCELLED });
+    return this.serialize(await this.refetch(id));
+  }
+
+  private async refetch(id: string): Promise<BookingWithService> {
+    const fresh = await bookingsRepository.findByIdWithService(id);
+    if (!fresh) throw ApiError.notFound("Booking not found");
+    return fresh;
   }
 }
 

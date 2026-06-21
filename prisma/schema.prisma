@@ -262,6 +262,14 @@ model Booking {
   currency       String        @default("USD")
   locationMode   LocationMode  @default(ONSITE)
   notes          String?
+  // Customer-entered details captured at the booking "Details" step.
+  contactName    String?
+  contactEmail   String?
+  contactPhone   String?
+  address        String?
+  // Full schedule preferences (all preferred windows + flexibility + timezone)
+  // as entered; scheduledStart/End above hold the first preferred window.
+  schedulePreferences Json?
   // Immutable snapshot of the chosen config options (PriceLineItem[]) at booking
   // time; priceAmount = service base + sum of these modifiers ("Option A").
   selections     Json?

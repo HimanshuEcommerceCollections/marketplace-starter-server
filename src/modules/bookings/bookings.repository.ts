@@ -11,6 +11,20 @@ export class BookingsRepository {
   findById(id: string) {
     return prisma.booking.findUnique({ where: { id } });
   }
+  /** List with the service name/slug joined, for the customer "My Bookings" view. */
+  findManyWithService(args: Prisma.BookingFindManyArgs) {
+    return prisma.booking.findMany({
+      ...args,
+      include: { service: { select: { name: true, slug: true } } },
+    });
+  }
+  /** Single booking with the service name/slug joined. */
+  findByIdWithService(id: string) {
+    return prisma.booking.findUnique({
+      where: { id },
+      include: { service: { select: { name: true, slug: true } } },
+    });
+  }
   create(data: Prisma.BookingUncheckedCreateInput) {
     return prisma.booking.create({ data });
   }
