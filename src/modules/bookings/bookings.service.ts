@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import type { Prisma } from "@prisma/client";
 import { bookingsRepository } from "./bookings.repository";
 import { servicesService } from "../services/services.service";
+import { serviceConfigService } from "../services/config/service-config.service";
 import { ApiError } from "../../utils/api-error";
 import { buildPagination, buildMeta } from "../../utils/pagination";
 import { BookingStatus, ServiceStatus } from "../../enums";
@@ -29,17 +30,23 @@ export class BookingsService {
       throw ApiError.badRequest("scheduledEnd must be after scheduledStart");
     }
 
+    // "Option A" pricing: validate the selected options against the service's
+    // configuration and snapshot the breakdown. With no selections this still
+    // enforces any required groups and yields the base price.
+    const quote = await serviceConfigService.quotePrice(service.id, dto.optionIds ?? [], true);
+
     return bookingsRepository.create({
       reference: generateReference(),
       customerId,
       serviceId: service.id,
       providerId: service.providerId,
-      priceAmount: service.priceAmount,
+      priceAmount: quote.total,
       currency: service.currency,
       locationMode: dto.locationMode ?? service.locationMode,
       scheduledStart: dto.scheduledStart,
       scheduledEnd: dto.scheduledEnd,
       notes: dto.notes,
+      selections: quote.lineItems as unknown as Prisma.InputJsonValue,
       status: BookingStatus.PENDING,
     });
   }

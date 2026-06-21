@@ -4,6 +4,7 @@ import { servicesService } from "../services.service";
 import { ApiError } from "../../../utils/api-error";
 import { resolveServiceAssets } from "../../../config/service-assets";
 import { ConfigStatus } from "../../../enums";
+import { ConfigSelectionType } from "../../../enums";
 import type {
   CreateConfigGroupDto,
   UpdateConfigGroupDto,
@@ -12,6 +13,8 @@ import type {
   ConfigOptionResponse,
   ConfigGroupResponse,
   ServiceWithConfigResponse,
+  PriceLineItem,
+  PriceQuoteResponse,
 } from "./service-config.types";
 
 type GroupWithOptions = Prisma.ServiceConfigGroupGetPayload<{ include: { options: true } }>;
@@ -249,6 +252,85 @@ export class ServiceConfigService {
     await serviceConfigRepository.reorderOptions(optionIds);
     const updated = await serviceConfigRepository.findGroupWithOptions(groupId);
     return this.serializeGroup(updated!);
+  }
+
+  // ── pricing ("Option A": base + sum of selected option modifiers) ─────────────
+  /**
+   * Compute a price quote for a set of selected options. Validates selections
+   * against the service's ACTIVE configuration per the selection rules:
+   *   - every selected option must be ACTIVE and belong to an ACTIVE group here;
+   *   - a SINGLE_SELECT group accepts at most one selection;
+   *   - a required ACTIVE group must have at least one selection.
+   * Returns the base price, one line item per selected option, and the total.
+   */
+  async quotePrice(
+    serviceId: string,
+    optionIds: string[],
+    staff = false,
+  ): Promise<PriceQuoteResponse> {
+    const svc = await this.ensureService(serviceId, staff);
+    const groups = await serviceConfigRepository.findGroupsByService(serviceId);
+
+    // Index the only selectable options: ACTIVE options within ACTIVE groups.
+    const selectable = new Map<string, { group: GroupWithOptions; option: ServiceConfigOption }>();
+    for (const group of groups) {
+      if (group.status !== ConfigStatus.ACTIVE) continue;
+      for (const option of group.options) {
+        if (option.status === ConfigStatus.ACTIVE) {
+          selectable.set(option.id, { group, option });
+        }
+      }
+    }
+
+    // Dedupe + validate availability; bucket selections by group.
+    const selectedIds = new Set(optionIds);
+    const selectedByGroup = new Map<string, number>();
+    for (const id of selectedIds) {
+      const hit = selectable.get(id);
+      if (!hit) {
+        throw ApiError.badRequest(`Option "${id}" is not available for this service`);
+      }
+      selectedByGroup.set(hit.group.id, (selectedByGroup.get(hit.group.id) ?? 0) + 1);
+    }
+
+    // Per-group selection rules over ACTIVE groups.
+    for (const group of groups) {
+      if (group.status !== ConfigStatus.ACTIVE) continue;
+      const chosen = selectedByGroup.get(group.id) ?? 0;
+      if (group.selectionType === ConfigSelectionType.SINGLE_SELECT && chosen > 1) {
+        throw ApiError.badRequest(`"${group.label}" allows only one option`);
+      }
+      if (group.isRequired && chosen === 0) {
+        throw ApiError.badRequest(`"${group.label}" is required`);
+      }
+    }
+
+    // Build line items in group/option order; total = base + sum(modifiers).
+    const lineItems: PriceLineItem[] = [];
+    for (const group of groups) {
+      if (group.status !== ConfigStatus.ACTIVE) continue;
+      for (const option of group.options) {
+        if (selectedIds.has(option.id) && option.status === ConfigStatus.ACTIVE) {
+          lineItems.push({
+            groupId: group.id,
+            groupLabel: group.label,
+            optionId: option.id,
+            optionKey: option.key,
+            optionLabel: option.label,
+            priceModifier: option.priceModifier,
+          });
+        }
+      }
+    }
+    const total = lineItems.reduce((sum, li) => sum + li.priceModifier, svc.priceAmount);
+
+    return {
+      serviceId: svc.id,
+      currency: svc.currency,
+      basePrice: svc.priceAmount,
+      lineItems,
+      total,
+    };
   }
 
   /** A reorder list must be a permutation of the current set (no adds/drops). */
