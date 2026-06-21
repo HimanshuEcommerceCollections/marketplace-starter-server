@@ -15,14 +15,14 @@ export class BookingsRepository {
   findManyWithService(args: Prisma.BookingFindManyArgs) {
     return prisma.booking.findMany({
       ...args,
-      include: { service: { select: { name: true, slug: true } } },
+      include: { service: { select: { name: true, slug: true } }, userDetails: true },
     });
   }
   /** Single booking with the service name/slug joined. */
   findByIdWithService(id: string) {
     return prisma.booking.findUnique({
       where: { id },
-      include: { service: { select: { name: true, slug: true } } },
+      include: { service: { select: { name: true, slug: true } }, userDetails: true },
     });
   }
   create(data: Prisma.BookingUncheckedCreateInput) {

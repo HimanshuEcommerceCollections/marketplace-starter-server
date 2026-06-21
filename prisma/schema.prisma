@@ -129,6 +129,7 @@ model User {
   refreshTokens      RefreshToken[]
   waitlistEntries    WaitlistEntry[]
   notifications      Notification[]
+  userDetails        UserDetails[]
 
   @@index([role])
   @@index([status])
@@ -262,11 +263,6 @@ model Booking {
   currency       String        @default("USD")
   locationMode   LocationMode  @default(ONSITE)
   notes          String?
-  // Customer-entered details captured at the booking "Details" step.
-  contactName    String?
-  contactEmail   String?
-  contactPhone   String?
-  address        String?
   // Full schedule preferences (all preferred windows + flexibility + timezone)
   // as entered; scheduledStart/End above hold the first preferred window.
   schedulePreferences Json?
@@ -276,17 +272,38 @@ model Booking {
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
-  customer User             @relation("CustomerBookings", fields: [customerId], references: [id])
-  service  Service          @relation(fields: [serviceId], references: [id])
-  provider ServiceProvider? @relation("ProviderBookings", fields: [providerId], references: [id])
-  payment  Payment?
-  review   Review?
+  customer    User             @relation("CustomerBookings", fields: [customerId], references: [id])
+  service     Service          @relation(fields: [serviceId], references: [id])
+  provider    ServiceProvider? @relation("ProviderBookings", fields: [providerId], references: [id])
+  payment     Payment?
+  review      Review?
+  // Immutable snapshot of the customer-entered "Details" step (contact + address).
+  userDetails UserDetails?
 
   @@index([customerId])
   @@index([serviceId])
   @@index([providerId])
   @@index([status])
   @@index([scheduledStart])
+}
+
+/// Immutable snapshot of the "Details" step a customer entered for a booking.
+/// One row per booking (1:1), tagged with the user it belongs to. Never updated.
+model UserDetails {
+  id        String   @id @default(uuid())
+  bookingId String   @unique
+  userId    String
+  name      String?
+  email     String?
+  phone     String?
+  address   String?
+  createdAt DateTime @default(now())
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@map("user_details")
 }
 
 model AvailabilitySlot {

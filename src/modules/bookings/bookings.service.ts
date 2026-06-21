@@ -15,7 +15,7 @@ import type {
 } from "./bookings.types";
 
 type BookingWithService = Prisma.BookingGetPayload<{
-  include: { service: { select: { name: true; slug: true } } };
+  include: { service: { select: { name: true; slug: true } }; userDetails: true };
 }>;
 
 function generateReference(): string {
@@ -51,16 +51,21 @@ export class BookingsService {
       scheduledStart: dto.scheduledStart,
       scheduledEnd: dto.scheduledEnd,
       notes: dto.notes,
-      // Persisted customer details from the "Details" step.
-      contactName: dto.contact?.name,
-      contactEmail: dto.contact?.email,
-      contactPhone: dto.contact?.phone,
-      address: dto.address,
       ...(dto.schedulePreferences
         ? { schedulePreferences: dto.schedulePreferences as unknown as Prisma.InputJsonValue }
         : {}),
       selections: quote.lineItems as unknown as Prisma.InputJsonValue,
       status: BookingStatus.PENDING,
+      // Immutable snapshot of the customer-entered "Details" step (contact + address).
+      userDetails: {
+        create: {
+          userId: customerId,
+          name: dto.contact?.name,
+          email: dto.contact?.email,
+          phone: dto.contact?.phone,
+          address: dto.address,
+        },
+      },
     });
   }
 
@@ -78,10 +83,10 @@ export class BookingsService {
       currency: b.currency,
       locationMode: b.locationMode,
       notes: b.notes,
-      contactName: b.contactName,
-      contactEmail: b.contactEmail,
-      contactPhone: b.contactPhone,
-      address: b.address,
+      contactName: b.userDetails?.name ?? null,
+      contactEmail: b.userDetails?.email ?? null,
+      contactPhone: b.userDetails?.phone ?? null,
+      address: b.userDetails?.address ?? null,
       schedulePreferences: b.schedulePreferences,
       selections: b.selections,
       createdAt: b.createdAt.toISOString(),
