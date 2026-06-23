@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import { env } from "./env";
 import { SERVICES_DIR_NAME, DEFAULT_ASSETS_SLUG } from "./upload.config";
+import { getServiceImageDefault } from "./service-image-defaults";
 
 /**
  * Service presentation assets (a single SVG icon + ordered cover images) are
@@ -77,16 +78,21 @@ export function getServiceImageAssetEntry(slug: string): ServiceImageAssetEntry 
 /**
  * Resolve a slug's assets for API responses. Field-level fallback: a service
  * with covers but no icon still gets the default icon, and vice versa.
- * Priority per field: registry entry → DEFAULT_ASSETS.
+ * Priority per field: runtime registry (uploads) → committed config
+ * (service-image-defaults.ts) → shared DEFAULT_ASSETS.
  */
 export function resolveServiceImageAssets(slug: string): ResolvedServiceImageAssets {
   const entry = readRegistry()[slug];
+  const committed = getServiceImageDefault(slug);
   return {
-    iconPath: entry?.iconPath ?? DEFAULT_ASSETS.iconPath,
+    // Priority per field: runtime upload (registry) → committed config → shared default.
+    iconPath: entry?.iconPath ?? committed.iconPath ?? DEFAULT_ASSETS.iconPath,
     coverImages:
       entry?.coverImages && entry.coverImages.length > 0
         ? entry.coverImages
-        : DEFAULT_ASSETS.coverImages,
+        : committed.coverImages && committed.coverImages.length > 0
+          ? committed.coverImages
+          : DEFAULT_ASSETS.coverImages,
   };
 }
 
