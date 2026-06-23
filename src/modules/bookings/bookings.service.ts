@@ -15,7 +15,12 @@ import type {
 } from "./bookings.types";
 
 type BookingWithService = Prisma.BookingGetPayload<{
-  include: { service: { select: { name: true; slug: true } }; userDetails: true };
+  include: {
+    service: { select: { name: true; slug: true } };
+    userDetails: true;
+    customer: { select: { name: true; email: true } };
+    provider: { select: { displayName: true } };
+  };
 }>;
 
 function generateReference(): string {
@@ -71,14 +76,22 @@ export class BookingsService {
 
   /** DB row (with joined service) → API response shape. */
   private serialize(b: BookingWithService): BookingResponse {
+    // Canonical slot is the `scheduledStart` instant; expose convenience
+    // date-only ("YYYY-MM-DD") + time-only ("HH:mm") splits derived from it.
+    const startIso = b.scheduledStart.toISOString();
     return {
       id: b.id,
       reference: b.reference,
       status: b.status,
       serviceName: b.service.name,
       serviceSlug: b.service.slug,
-      scheduledStart: b.scheduledStart.toISOString(),
+      customerName: b.customer.name,
+      customerEmail: b.customer.email,
+      providerName: b.provider?.displayName ?? null,
+      scheduledStart: startIso,
       scheduledEnd: b.scheduledEnd.toISOString(),
+      scheduledDate: startIso.slice(0, 10),
+      scheduledTime: startIso.slice(11, 16),
       priceAmount: b.priceAmount,
       currency: b.currency,
       locationMode: b.locationMode,

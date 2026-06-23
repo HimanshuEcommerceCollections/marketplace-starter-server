@@ -24,8 +24,13 @@ export interface BookingResponse {
   status: BookingStatus;
   serviceName: string;
   serviceSlug: string;
-  scheduledStart: string;
+  customerName: string;
+  customerEmail: string;
+  providerName: string | null;
+  scheduledStart: string; // ISO 8601 instant (canonical)
   scheduledEnd: string;
+  scheduledDate: string; // "YYYY-MM-DD" derived from scheduledStart (UTC)
+  scheduledTime: string; // "HH:mm" derived from scheduledStart (UTC)
   priceAmount: number;
   currency: string;
   locationMode: string;
