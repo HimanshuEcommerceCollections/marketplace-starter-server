@@ -1,6 +1,10 @@
 # dependencies
 node_modules/
 
+# npm config — never commit; script-shell=powershell is a local-Windows-only
+# workaround for the "&" in the project path and breaks Linux CI/deploys (Render)
+.npmrc
+
 # build output
 dist/
 
