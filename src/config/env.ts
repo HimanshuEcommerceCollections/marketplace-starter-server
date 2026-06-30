@@ -41,6 +41,14 @@ const EnvSchema = z.object({
   // src/config/service-image-assets.ts.
   ASSET_STORAGE_DIR: z.string().optional(),
   SERVICE_ASSETS_FILE: z.string().optional(),
+
+  // Stripe payments. Optional so the app still boots without them (dev/test):
+  // payment routes respond 501 until the secret key is configured, and the
+  // webhook 501s until the signing secret is set. STRIPE_PUBLISHABLE_KEY is
+  // surfaced to the client so it can initialize Stripe.js.
+  STRIPE_SECRET_KEY: z.string().optional(),
+  STRIPE_WEBHOOK_SECRET: z.string().optional(),
+  STRIPE_PUBLISHABLE_KEY: z.string().optional(),
 });
 
 const parsed = EnvSchema.safeParse(process.env);
