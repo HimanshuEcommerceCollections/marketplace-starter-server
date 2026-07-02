@@ -12,4 +12,11 @@ export const Messages = {
     VALIDATION_FAILED: "Validation failed",
     INTERNAL_ERROR: "Internal server error",
   },
+  PAYMENT: {
+    NOT_CONFIGURED: "Payments are not configured",
+    BOOKING_NOT_PAYABLE: "This booking is not awaiting payment",
+    ALREADY_PAID: "This booking has already been paid",
+    NOT_REFUNDABLE: "Only paid payments can be refunded",
+    INVALID_SIGNATURE: "Invalid webhook signature",
+  },
 } as const;

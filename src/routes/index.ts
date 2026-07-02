@@ -8,6 +8,7 @@ import { availabilityRouter } from "../modules/availability";
 import { waitlistRouter } from "../modules/waitlist";
 import { reviewsRouter } from "../modules/reviews";
 import { adminRouter } from "../modules/admin";
+import { paymentsRouter } from "../modules/payments";
 
 /** API v1 router — aggregates every feature module under one mount point. */
 export const apiRouter = Router();
@@ -30,3 +31,4 @@ apiRouter.use("/availability", availabilityRouter);
 apiRouter.use("/waitlist", waitlistRouter);
 apiRouter.use("/reviews", reviewsRouter);
 apiRouter.use("/admin", adminRouter);
+apiRouter.use("/payments", paymentsRouter);

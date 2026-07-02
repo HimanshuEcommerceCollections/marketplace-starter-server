@@ -38,35 +38,35 @@ export interface ServiceImageDefault {
 export const SERVICE_IMAGE_DEFAULTS: Record<string, ServiceImageDefault> = {
   massage: {
     iconPath: "/services/massage/icon.svg",
-    coverImages: ["/services/massage/cover-1.svg"],
+    coverImages: ["/services/massage/cover-1.jpg"],
   },
   "personal-training": {
     iconPath: "/services/personal-training/icon.svg",
-    coverImages: ["/services/personal-training/cover-1.svg"],
+    coverImages: ["/services/personal-training/cover-1.jpg"],
   },
   yoga: {
     iconPath: "/services/yoga/icon.svg",
-    coverImages: ["/services/yoga/cover-1.svg"],
+    coverImages: ["/services/yoga/cover-1.jpg"],
   },
   beauty: {
     iconPath: "/services/beauty/icon.svg",
-    coverImages: ["/services/beauty/cover-1.svg"],
+    coverImages: ["/services/beauty/cover-1.jpg"],
   },
   "nutrition-coaching": {
     iconPath: "/services/nutrition-coaching/icon.svg",
-    coverImages: ["/services/nutrition-coaching/cover-1.svg"],
+    coverImages: ["/services/nutrition-coaching/cover-1.jpg"],
   },
   "life-coaching": {
     iconPath: "/services/life-coaching/icon.svg",
-    coverImages: ["/services/life-coaching/cover-1.svg"],
+    coverImages: ["/services/life-coaching/cover-1.jpg"],
   },
   "physical-therapy": {
     iconPath: "/services/physical-therapy/icon.svg",
-    coverImages: ["/services/physical-therapy/cover-1.svg"],
+    coverImages: ["/services/physical-therapy/cover-1.jpg"],
   },
   "speech-therapy": {
     iconPath: "/services/speech-therapy/icon.svg",
-    coverImages: ["/services/speech-therapy/cover-1.svg"],
+    coverImages: ["/services/speech-therapy/cover-1.jpg"],
   },
 };
 
