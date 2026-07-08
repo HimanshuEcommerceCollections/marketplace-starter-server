@@ -125,6 +125,7 @@ async function main() {
             create: choices.map((ch: any, oi: number) => ({
               key: ch.id,
               label: ch.label,
+              description: ch.description ?? null,
               priceModifier: modifierFor(pricingRef, co.id, ch.id),
               sortOrder: oi,
               status: ConfigStatus.ACTIVE,
