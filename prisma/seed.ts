@@ -7,6 +7,7 @@ import {
   ServiceStatus,
   ConfigSelectionType,
   ConfigStatus,
+  CorporateInquiryStatus,
 } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { readFileSync } from "fs";
@@ -59,6 +60,49 @@ async function main() {
       emailVerifiedAt: new Date(),
     },
   });
+
+  // ── Sample corporate inquiries ───────────────────────────────────────────────
+  // Demo lead-gen rows so the admin "Inquiries" section isn't empty. Only seeded
+  // when the table is empty (illustrative placeholder content, not real leads).
+  const inquiryCount = await prisma.corporateInquiry.count();
+  if (inquiryCount === 0) {
+    await prisma.corporateInquiry.createMany({
+      data: [
+        {
+          company: "Northwind Traders",
+          contactName: "Dana Whitfield",
+          contactEmail: "dana@northwind.test",
+          contactPhone: "(919) 555-0142",
+          headcount: "50–200",
+          eventType: "On-site series",
+          notes:
+            "Services of interest: Massage, Yoga\n\nLooking for a recurring monthly wellness day for our RTP office.",
+          status: CorporateInquiryStatus.NEW,
+        },
+        {
+          company: "Contoso Health",
+          contactName: "Marcus Lee",
+          contactEmail: "marcus.lee@contoso.test",
+          headcount: "200–500",
+          eventType: "Hybrid program",
+          notes:
+            "Services of interest: Life Coaching, Nutrition\n\nQ3 wellbeing initiative; need both on-site and remote options.",
+          status: CorporateInquiryStatus.CONTACTED,
+        },
+        {
+          company: "Fabrikam Studios",
+          contactName: "Priya Anand",
+          contactEmail: "priya@fabrikam.test",
+          contactPhone: "(415) 555-0199",
+          headcount: "5–50",
+          eventType: "One-off event",
+          notes:
+            "Services of interest: Open to suggestions\n\nTeam offsite in September, ~30 people.",
+          status: CorporateInquiryStatus.QUALIFIED,
+        },
+      ],
+    });
+  }
 
   // ── Services + nested config (groups → options) ───────────────────────────────
   // One flat bookable Service per home-page card (slug = service id). Details:
