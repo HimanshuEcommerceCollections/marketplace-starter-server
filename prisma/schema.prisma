@@ -106,6 +106,13 @@ enum NotificationStatus {
   READ
 }
 
+enum CorporateInquiryStatus {
+  NEW // just submitted, awaiting triage
+  CONTACTED // a coordinator has reached out
+  QUALIFIED // qualified lead, proposal in progress
+  CLOSED // resolved (won, lost, or archived)
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 // Identity & access
 // ────────────────────────────────────────────────────────────────────────────
@@ -409,4 +416,30 @@ model WebhookEvent {
   processedAt DateTime @default(now())
 
   @@index([provider])
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Marketing / lead-gen
+// ────────────────────────────────────────────────────────────────────────────
+
+/// A "Request a proposal" submission from the public Corporate Wellness page.
+/// Anonymous (no user relation) — captured by anyone; read/triaged by staff in
+/// the admin dashboard. `headcount`, `eventType`, and `preferredDate` are kept
+/// as free-text strings because they come from open-ended form fields.
+model CorporateInquiry {
+  id            String                 @id @default(uuid())
+  company       String
+  contactName   String
+  contactEmail  String
+  contactPhone  String?
+  headcount     String? // team size (e.g. "50–200")
+  eventType     String // requested format (e.g. "On-site series")
+  preferredDate String?
+  notes         String? // services of interest + free-text message
+  status        CorporateInquiryStatus @default(NEW)
+  createdAt     DateTime               @default(now())
+  updatedAt     DateTime               @updatedAt
+
+  @@index([status])
+  @@index([createdAt])
 }
