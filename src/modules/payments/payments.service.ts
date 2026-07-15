@@ -184,8 +184,10 @@ export class PaymentsService {
     let bookingStatus: BookingStatus | undefined;
     switch (event.kind) {
       case "payment_succeeded":
+        // Payment captured — but the booking stays PENDING for an admin/
+        // coordinator to confirm or reject. Only staff move it to CONFIRMED
+        // (business rule: a paid request is reviewed before it's confirmed).
         paymentStatus = PaymentStatus.PAID;
-        bookingStatus = BookingStatus.CONFIRMED;
         break;
       case "payment_failed":
       case "payment_canceled":
@@ -242,24 +244,21 @@ export class PaymentsService {
       bookingStatus,
     });
 
-    await this.notify(payment, paymentStatus, bookingStatus);
+    await this.notify(payment, bookingStatus);
 
     return { received: true, handled: true };
   }
 
-  /** Best-effort notification write; a failure here must never fail the webhook. */
+  /** Best-effort notification write; a failure here must never fail the webhook.
+   *  Only a booking-status change (e.g. full refund → CANCELLED) notifies here —
+   *  the "booking confirmed" notice is sent when a coordinator confirms, not at
+   *  payment time (a paid booking is still PENDING review). */
   private async notify(
     payment: PaymentWithBooking,
-    paymentStatus: PaymentStatus,
     bookingStatus?: BookingStatus,
   ): Promise<void> {
     try {
-      if (paymentStatus === PaymentStatus.PAID) {
-        await notificationsService.notifyBookingConfirmed(
-          payment.booking.customerId,
-          payment.booking,
-        );
-      } else if (bookingStatus === BookingStatus.CANCELLED) {
+      if (bookingStatus === BookingStatus.CANCELLED) {
         await notificationsService.notifyBookingCancelled(
           payment.booking.customerId,
           payment.booking,

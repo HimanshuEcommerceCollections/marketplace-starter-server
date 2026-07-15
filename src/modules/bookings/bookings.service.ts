@@ -4,7 +4,9 @@ import { bookingsRepository } from "./bookings.repository";
 import { servicesService } from "../services/services.service";
 import { serviceConfigService } from "../services/config/service-config.service";
 import { ApiError } from "../../utils/api-error";
+import { logger } from "../../utils/logger";
 import { buildPagination, buildMeta } from "../../utils/pagination";
+import { notificationsService } from "../notifications";
 import { BookingStatus, ServiceStatus } from "../../enums";
 import type {
   CreateBookingDto,
@@ -154,10 +156,22 @@ export class BookingsService {
     return this.findOwned(id, requester);
   }
 
+  /** Staff status transition (admin/coordinator). Notifies the customer when the
+   *  booking is confirmed or rejected (cancelled). */
   async updateStatus(id: string, dto: UpdateBookingStatusDto) {
-    const booking = await this.findOwned(id);
+    await this.findOwned(id); // 404s if it doesn't exist
     await bookingsRepository.update(id, { status: dto.status });
-    return this.serialize(await this.refetch(booking.id));
+    const fresh = await this.refetch(id);
+    try {
+      if (dto.status === BookingStatus.CONFIRMED) {
+        await notificationsService.notifyBookingConfirmed(fresh.customerId, fresh);
+      } else if (dto.status === BookingStatus.CANCELLED) {
+        await notificationsService.notifyBookingCancelled(fresh.customerId, fresh);
+      }
+    } catch (err) {
+      logger.error("Failed to write booking-status notification", err);
+    }
+    return this.serialize(fresh);
   }
 
   async cancel(id: string, requester: BookingRequester) {
