@@ -48,6 +48,7 @@ export class AuthService {
       name: dto.name,
       phone: dto.phone,
       brand: dto.brand,
+      area: dto.area,
       status: UserStatus.ACTIVE,
     });
 

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { Brand } from "../../enums";
+import { Brand, ServiceArea } from "../../enums";
 
 /**
  * Accepts the Client's lowercase brand slug (e.g. "elevate" from
@@ -16,6 +16,12 @@ export const registerSchema = z.object({
   password: z.string().min(8, "Password must be at least 8 characters"),
   phone: z.string().min(5).optional(),
   brand: brandSchema,
+  // Coverage area is multi-value: a customer may select several Wake County
+  // towns. At least one is required at signup.
+  area: z
+    .array(z.nativeEnum(ServiceArea))
+    .min(1, "Select at least one area")
+    .max(12),
 });
 
 export const loginSchema = z.object({

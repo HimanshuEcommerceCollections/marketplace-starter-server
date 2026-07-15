@@ -41,6 +41,23 @@ enum Brand {
   EDUCATION
 }
 
+/// Service coverage areas (Wake County towns). A user may cover/select several,
+/// so `User.area` is a LIST of these values — never a single choice.
+enum ServiceArea {
+  RALEIGH
+  CARY
+  APEX
+  WAKE_FOREST
+  MORRISVILLE
+  GARNER
+  HOLLY_SPRINGS
+  FUQUAY_VARINA
+  KNIGHTDALE
+  WENDELL
+  ZEBULON
+  ROLESVILLE
+}
+
 enum BookingStatus {
   DRAFT
   PENDING
@@ -124,6 +141,9 @@ model User {
   name            String
   phone           String?
   brand           Brand
+  // Coverage areas the user selected at signup. A LIST (multi-select) — empty by
+  // default; existing rows are backfilled to [RALEIGH] in the add-user-area migration.
+  area            ServiceArea[] @default([])
   role            UserRole   @default(USER_CUSTOMER)
   status          UserStatus @default(PENDING_VERIFICATION)
   emailVerifiedAt DateTime?
