@@ -1,5 +1,5 @@
 import type { z } from "zod";
-import type { BookingStatus } from "@prisma/client";
+import type { BookingStatus, ServiceArea } from "@prisma/client";
 import type {
   createBookingSchema,
   listBookingsSchema,
@@ -27,6 +27,7 @@ export interface BookingResponse {
   customerName: string;
   customerEmail: string;
   providerName: string | null;
+  providerCredential: string | null;
   scheduledStart: string; // ISO 8601 instant (canonical)
   scheduledEnd: string;
   scheduledDate: string; // "YYYY-MM-DD" derived from scheduledStart (UTC)
@@ -34,6 +35,7 @@ export interface BookingResponse {
   priceAmount: number;
   currency: string;
   locationMode: string;
+  area: ServiceArea | null;
   notes: string | null;
   contactName: string | null;
   contactEmail: string | null;
@@ -41,5 +43,7 @@ export interface BookingResponse {
   address: string | null;
   schedulePreferences: unknown;
   selections: unknown;
+  /** The customer's review of this (completed) booking, if they left one. */
+  review: { rating: number; comment: string | null } | null;
   createdAt: string;
 }

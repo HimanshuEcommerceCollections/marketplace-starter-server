@@ -181,6 +181,7 @@ model ServiceProvider {
   userId     String   @unique
   displayName String
   bio        String?
+  credential String? // professional credential shown on bookings (e.g. "LMBT", "DPT", "RYT-500")
   isVerified Boolean  @default(false)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
@@ -289,6 +290,8 @@ model Booking {
   priceAmount    Int
   currency       String        @default("USD")
   locationMode   LocationMode  @default(ONSITE)
+  // Wake County town the session takes place in (customer-selected at booking).
+  area           ServiceArea?
   notes          String?
   // Full schedule preferences (all preferred windows + flexibility + timezone)
   // as entered; scheduledStart/End above hold the first preferred window.

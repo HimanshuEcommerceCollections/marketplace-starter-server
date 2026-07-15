@@ -19,7 +19,8 @@ type BookingWithService = Prisma.BookingGetPayload<{
     service: { select: { name: true; slug: true } };
     userDetails: true;
     customer: { select: { name: true; email: true } };
-    provider: { select: { displayName: true } };
+    provider: { select: { displayName: true; credential: true } };
+    review: { select: { rating: true; comment: true } };
   };
 }>;
 
@@ -53,6 +54,7 @@ export class BookingsService {
       priceAmount: quote.total,
       currency: service.currency,
       locationMode: dto.locationMode ?? service.locationMode,
+      area: dto.area,
       scheduledStart: dto.scheduledStart,
       scheduledEnd: dto.scheduledEnd,
       notes: dto.notes,
@@ -88,6 +90,7 @@ export class BookingsService {
       customerName: b.customer.name,
       customerEmail: b.customer.email,
       providerName: b.provider?.displayName ?? null,
+      providerCredential: b.provider?.credential ?? null,
       scheduledStart: startIso,
       scheduledEnd: b.scheduledEnd.toISOString(),
       scheduledDate: startIso.slice(0, 10),
@@ -95,6 +98,7 @@ export class BookingsService {
       priceAmount: b.priceAmount,
       currency: b.currency,
       locationMode: b.locationMode,
+      area: b.area,
       notes: b.notes,
       contactName: b.userDetails?.name ?? null,
       contactEmail: b.userDetails?.email ?? null,
@@ -102,6 +106,7 @@ export class BookingsService {
       address: b.userDetails?.address ?? null,
       schedulePreferences: b.schedulePreferences,
       selections: b.selections,
+      review: b.review ? { rating: b.review.rating, comment: b.review.comment } : null,
       createdAt: b.createdAt.toISOString(),
     };
   }
