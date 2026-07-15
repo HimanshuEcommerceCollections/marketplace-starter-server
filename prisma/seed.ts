@@ -5,6 +5,7 @@ import {
   LocationMode,
   Brand,
   ServiceArea,
+  BookingStatus,
   ServiceStatus,
   ConfigSelectionType,
   ConfigStatus,
@@ -191,10 +192,144 @@ async function main() {
     where: { slug: { notIn: serviceSlugs } },
   });
 
+  // ── Sample professionals (providers) + assignment to services ─────────────────
+  // Gives bookings a real provider name + credential to display on "My Bookings".
+  // Idempotent via upsert on the provider user's email / profile's userId.
+  const providerSpecs: Array<{
+    email: string;
+    name: string;
+    credential: string;
+    bio: string;
+    slug: string;
+  }> = [
+    { email: "maya.pro@elevate.test", name: "Maya R.", credential: "LMBT", bio: "Licensed massage & bodywork therapist.", slug: "massage" },
+    { email: "priya.pro@elevate.test", name: "Dr. Priya N.", credential: "DPT", bio: "Doctor of physical therapy.", slug: "physical-therapy" },
+    { email: "ana.pro@elevate.test", name: "Ana L.", credential: "RYT-500", bio: "Registered yoga teacher (500h).", slug: "yoga" },
+    { email: "derek.pro@elevate.test", name: "Derek S.", credential: "CPT", bio: "Certified personal trainer.", slug: "personal-training" },
+    { email: "sofia.pro@elevate.test", name: "Sofia M.", credential: "Cosmetologist", bio: "Licensed cosmetologist.", slug: "beauty" },
+    { email: "rachel.pro@elevate.test", name: "Rachel T.", credential: "RD", bio: "Registered dietitian.", slug: "nutrition-coaching" },
+  ];
+  const providerBySlug = new Map<string, string>(); // service slug -> ServiceProvider.id
+  for (const p of providerSpecs) {
+    const user = await prisma.user.upsert({
+      where: { email: p.email },
+      update: {},
+      create: {
+        email: p.email,
+        passwordHash,
+        name: p.name,
+        brand: Brand.ELEVATE,
+        role: UserRole.SYSTEM_PROVIDER,
+        status: UserStatus.ACTIVE,
+        emailVerifiedAt: new Date(),
+      },
+    });
+    const profile = await prisma.serviceProvider.upsert({
+      where: { userId: user.id },
+      update: { displayName: p.name, bio: p.bio, credential: p.credential, isVerified: true },
+      create: { userId: user.id, displayName: p.name, bio: p.bio, credential: p.credential, isVerified: true },
+    });
+    const svc = await prisma.service.findUnique({ where: { slug: p.slug } });
+    if (svc) {
+      await prisma.service.update({ where: { id: svc.id }, data: { providerId: profile.id } });
+      providerBySlug.set(p.slug, profile.id);
+    }
+  }
+
+  // ── Demo customer + sample bookings ───────────────────────────────────────────
+  // Populates the "My Bookings" page for demos — log in as demo@elevate.test.
+  // Only seeded once (when the demo customer has no bookings yet).
+  const demo = await prisma.user.upsert({
+    where: { email: "demo@elevate.test" },
+    update: {},
+    create: {
+      email: "demo@elevate.test",
+      passwordHash,
+      name: "Jordan Rivera",
+      brand: Brand.ELEVATE,
+      area: [ServiceArea.RALEIGH, ServiceArea.CARY],
+      role: UserRole.USER_CUSTOMER,
+      status: UserStatus.ACTIVE,
+      emailVerifiedAt: new Date(),
+    },
+  });
+
+  let demoBookingCount = 0;
+  if ((await prisma.booking.count({ where: { customerId: demo.id } })) === 0) {
+    const now = new Date();
+    const at = (deltaDays: number, h: number, m = 0) => {
+      const d = new Date(now);
+      d.setDate(d.getDate() + deltaDays);
+      d.setHours(h, m, 0, 0);
+      return d;
+    };
+    type DemoBooking = {
+      slug: string;
+      ref: string;
+      status: BookingStatus;
+      area: ServiceArea;
+      start: Date;
+      durMin: number;
+      review?: { rating: number; comment: string };
+    };
+    const demoBookings: DemoBooking[] = [
+      { slug: "massage", ref: "ELV-4821", status: BookingStatus.CONFIRMED, area: ServiceArea.CARY, start: at(2, 18), durMin: 90 },
+      { slug: "physical-therapy", ref: "ELV-4955", status: BookingStatus.PENDING, area: ServiceArea.APEX, start: at(5, 9), durMin: 60 },
+      { slug: "yoga", ref: "ELV-4907", status: BookingStatus.CONFIRMED, area: ServiceArea.RALEIGH, start: at(8, 7, 30), durMin: 60 },
+      { slug: "personal-training", ref: "ELV-4310", status: BookingStatus.COMPLETED, area: ServiceArea.RALEIGH, start: at(-15, 18), durMin: 60 },
+      { slug: "beauty", ref: "ELV-4102", status: BookingStatus.COMPLETED, area: ServiceArea.MORRISVILLE, start: at(-31, 10), durMin: 60, review: { rating: 5, comment: "Wonderful — felt so refreshed afterwards." } },
+      { slug: "nutrition-coaching", ref: "ELV-3987", status: BookingStatus.CANCELLED, area: ServiceArea.WAKE_FOREST, start: at(-43, 17), durMin: 60 },
+    ];
+    for (const b of demoBookings) {
+      const svc = await prisma.service.findUnique({
+        where: { slug: b.slug },
+        select: { id: true, priceAmount: true, currency: true },
+      });
+      if (!svc) continue;
+      const booking = await prisma.booking.create({
+        data: {
+          reference: b.ref,
+          customerId: demo.id,
+          serviceId: svc.id,
+          providerId: providerBySlug.get(b.slug) ?? null,
+          status: b.status,
+          scheduledStart: b.start,
+          scheduledEnd: new Date(b.start.getTime() + b.durMin * 60000),
+          priceAmount: svc.priceAmount,
+          currency: svc.currency,
+          locationMode: LocationMode.ONSITE,
+          area: b.area,
+          userDetails: {
+            create: {
+              userId: demo.id,
+              name: demo.name,
+              email: demo.email,
+              phone: "(919) 555-0123",
+              address: "123 Oak Street",
+            },
+          },
+        },
+      });
+      if (b.review) {
+        await prisma.review.create({
+          data: {
+            bookingId: booking.id,
+            serviceId: svc.id,
+            authorId: demo.id,
+            rating: b.review.rating,
+            comment: b.review.comment,
+          },
+        });
+      }
+      demoBookingCount++;
+    }
+  }
+
   console.log(
     `Seeded admin=${admin.email}, services=${serviceCount} ` +
       `(removed ${removedServices.count} stray services), ` +
-      `configGroups=${groupCount}, configOptions=${optionCount}`,
+      `configGroups=${groupCount}, configOptions=${optionCount}, ` +
+      `providers=${providerBySlug.size}, demoBookings=${demoBookingCount}`,
   );
 }
 

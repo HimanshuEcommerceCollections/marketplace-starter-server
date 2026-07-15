@@ -19,7 +19,8 @@ export class BookingsRepository {
         service: { select: { name: true, slug: true } },
         userDetails: true,
         customer: { select: { name: true, email: true } },
-        provider: { select: { displayName: true } },
+        provider: { select: { displayName: true, credential: true } },
+        review: { select: { rating: true, comment: true } },
       },
     });
   }
@@ -31,7 +32,8 @@ export class BookingsRepository {
         service: { select: { name: true, slug: true } },
         userDetails: true,
         customer: { select: { name: true, email: true } },
-        provider: { select: { displayName: true } },
+        provider: { select: { displayName: true, credential: true } },
+        review: { select: { rating: true, comment: true } },
       },
     });
   }

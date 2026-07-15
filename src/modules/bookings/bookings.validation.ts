@@ -1,11 +1,13 @@
 import { z } from "zod";
-import { BookingStatus, LocationMode } from "../../enums";
+import { BookingStatus, LocationMode, ServiceArea } from "../../enums";
 
 export const createBookingSchema = z.object({
   serviceId: z.string().uuid(),
   scheduledStart: z.coerce.date(),
   scheduledEnd: z.coerce.date(),
   locationMode: z.nativeEnum(LocationMode).optional(),
+  // Wake County town the session takes place in (optional).
+  area: z.nativeEnum(ServiceArea).optional(),
   notes: z.string().max(2000).optional(),
   // Selected configuration option ids; price = base + their modifiers.
   optionIds: z.array(z.string().uuid()).optional(),
