@@ -47,6 +47,10 @@ export class UsersService {
       brand: dto.brand,
       role: dto.role,
       status: UserStatus.ACTIVE,
+      // Admin-provisioned accounts are trusted and skip self-verification, so
+      // stamp emailVerifiedAt — otherwise the login email-verification gate would
+      // lock them out (no verification email is ever sent on this path).
+      emailVerifiedAt: new Date(),
     });
     return toPublicUser(user);
   }

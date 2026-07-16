@@ -32,3 +32,15 @@ export const loginSchema = z.object({
 export const refreshSchema = z.object({
   refreshToken: z.string().min(10, "A valid refresh token is required"),
 });
+
+// Verification token is 32 random bytes hex-encoded (64 chars); accept a small
+// range rather than an exact length to stay tolerant of encoding changes.
+export const verifyEmailSchema = z.object({
+  token: z.string().min(32, "A valid verification token is required").max(256),
+});
+
+// Unauthenticated resend: caller supplies the address to (re)send to. The
+// service is deliberately silent about whether the address exists.
+export const resendVerificationSchema = z.object({
+  email: z.string().email(),
+});

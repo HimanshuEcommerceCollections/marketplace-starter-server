@@ -154,6 +154,7 @@ model User {
   bookingsAsCustomer Booking[]        @relation("CustomerBookings")
   reviews            Review[]
   refreshTokens      RefreshToken[]
+  verificationTokens VerificationToken[]
   waitlistEntries    WaitlistEntry[]
   notifications      Notification[]
   userDetails        UserDetails[]
@@ -169,6 +170,24 @@ model RefreshToken {
   expiresAt DateTime
   revokedAt DateTime?
   createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+/// Single-use email-verification tokens. Like RefreshToken, only the SHA-256 hash
+/// of the emailed token is persisted — the plaintext lives solely in the emailed
+/// verification link. A row is consumed (`consumedAt` stamped) on redeem, and any
+/// outstanding rows for a user are deleted when a new token is requested (resend),
+/// so at most one live token exists per user at a time.
+model VerificationToken {
+  id         String    @id @default(uuid())
+  userId     String
+  tokenHash  String    @unique
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 

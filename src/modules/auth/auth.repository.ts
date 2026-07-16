@@ -15,6 +15,14 @@ export class AuthRepository {
     return prisma.user.create({ data });
   }
 
+  /** Flip a user's verification state (emailVerifiedAt + status). */
+  markEmailVerified(
+    userId: string,
+    data: Pick<Prisma.UserUncheckedUpdateInput, "emailVerifiedAt" | "status">,
+  ) {
+    return prisma.user.update({ where: { id: userId }, data });
+  }
+
   storeRefreshToken(userId: string, tokenHash: string, expiresAt: Date) {
     return prisma.refreshToken.create({ data: { userId, tokenHash, expiresAt } });
   }
@@ -35,6 +43,31 @@ export class AuthRepository {
       where: { userId, revokedAt: null },
       data: { revokedAt: new Date() },
     });
+  }
+
+  // ── Email-verification tokens (only SHA-256 hashes are stored) ──────────────
+
+  storeVerificationToken(userId: string, tokenHash: string, expiresAt: Date) {
+    return prisma.verificationToken.create({
+      data: { userId, tokenHash, expiresAt },
+    });
+  }
+
+  findVerificationToken(tokenHash: string) {
+    return prisma.verificationToken.findUnique({ where: { tokenHash } });
+  }
+
+  /** Single-use: stamp consumedAt so a redeemed token can't be replayed. */
+  consumeVerificationToken(id: string) {
+    return prisma.verificationToken.update({
+      where: { id },
+      data: { consumedAt: new Date() },
+    });
+  }
+
+  /** Invalidate every outstanding token for a user (used before issuing a new one). */
+  deleteVerificationTokensForUser(userId: string) {
+    return prisma.verificationToken.deleteMany({ where: { userId } });
   }
 }
 
