@@ -63,9 +63,11 @@ export class AuthService {
 
     const passwordHash = await hashPassword(dto.password);
     // role omitted → defaults to USER_CUSTOMER (self-signup can never set a role).
-    // New accounts start unverified: they still receive session tokens below
-    // (auto-login preserved) but cannot log in again or take protected actions
-    // (e.g. booking) until they verify the email sent here.
+    // When verification is required, accounts start unverified: they still get
+    // session tokens below (auto-login preserved) but can't log in again or take
+    // protected actions (e.g. booking) until they verify. When it's disabled,
+    // accounts are created ACTIVE + already-verified and no email is sent.
+    const verificationRequired = env.EMAIL_VERIFICATION_REQUIRED;
     const user = await authRepository.createUser({
       email: dto.email,
       passwordHash,
@@ -73,15 +75,20 @@ export class AuthService {
       phone: dto.phone,
       brand: dto.brand,
       area: dto.area,
-      status: UserStatus.PENDING_VERIFICATION,
+      status: verificationRequired
+        ? UserStatus.PENDING_VERIFICATION
+        : UserStatus.ACTIVE,
+      emailVerifiedAt: verificationRequired ? null : new Date(),
     });
 
-    // Fire the verification email. A send failure must NOT roll back signup —
-    // the account and token already exist and the user can request a resend.
-    try {
-      await this.sendVerificationToken(user);
-    } catch (error) {
-      logger.error("Failed to send verification email during registration", error);
+    if (verificationRequired) {
+      // Fire the verification email. A send failure must NOT roll back signup —
+      // the account and token already exist and the user can request a resend.
+      try {
+        await this.sendVerificationToken(user);
+      } catch (error) {
+        logger.error("Failed to send verification email during registration", error);
+      }
     }
 
     const tokens = await this.issueTokens(user);
@@ -97,9 +104,10 @@ export class AuthService {
     if (user.status === UserStatus.SUSPENDED) {
       throw ApiError.forbidden("This account has been suspended");
     }
-    // Verification gate: unverified accounts cannot sign in. The `code` lets the
-    // client surface a "resend verification" affordance instead of a dead end.
-    if (!user.emailVerifiedAt) {
+    // Verification gate: unverified accounts cannot sign in (unless the feature
+    // is disabled via EMAIL_VERIFICATION_REQUIRED). The `code` lets the client
+    // surface a "resend verification" affordance instead of a dead end.
+    if (env.EMAIL_VERIFICATION_REQUIRED && !user.emailVerifiedAt) {
       throw new ApiError(
         HttpStatus.FORBIDDEN,
         "Please verify your email address before signing in. Check your inbox for the verification link.",
@@ -203,6 +211,7 @@ export class AuthService {
    * verified. Send failures are logged but never surfaced (generic success).
    */
   async resendVerificationForUser(userId: string): Promise<void> {
+    if (!env.EMAIL_VERIFICATION_REQUIRED) return;
     const user = await authRepository.findUserById(userId);
     if (!user || user.emailVerifiedAt) return;
     // Fire-and-forget: don't await the (slow) email send before returning, so
@@ -219,6 +228,7 @@ export class AuthService {
    * which addresses have accounts (enumeration-safe).
    */
   async resendVerificationForEmail(email: string): Promise<void> {
+    if (!env.EMAIL_VERIFICATION_REQUIRED) return;
     const user = await authRepository.findUserByEmail(email);
     if (!user || user.emailVerifiedAt) return;
     // Fire-and-forget (see resendVerificationForUser): uniform latency avoids an

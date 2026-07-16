@@ -1,6 +1,7 @@
 import { asyncHandler } from "../utils/async-handler";
 import { ApiError } from "../utils/api-error";
 import { HttpStatus } from "../constants/http-status";
+import { env } from "../config/env";
 import { authRepository } from "../modules/auth/auth.repository";
 
 /**
@@ -11,6 +12,9 @@ import { authRepository } from "../modules/auth/auth.repository";
  * clients can surface a "verify your email" affordance.
  */
 export const requireEmailVerified = asyncHandler(async (req, _res, next) => {
+  // Feature globally disabled → nothing to enforce.
+  if (!env.EMAIL_VERIFICATION_REQUIRED) return next();
+
   if (!req.user) throw ApiError.unauthorized();
 
   const user = await authRepository.findUserById(req.user.id);
