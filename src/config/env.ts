@@ -62,6 +62,16 @@ const EnvSchema = z.object({
   EMAIL_FROM: z.string().default("Elevate Health & Wellness <onboarding@resend.dev>"),
   APP_URL: z.string().url().default("http://localhost:3000"),
   EMAIL_VERIFICATION_TTL_MS: z.coerce.number().int().positive().default(86_400_000),
+
+  // Master switch for the whole email-verification feature. Defaults to ON.
+  // When disabled, new accounts are created ACTIVE + already-verified, no
+  // verification email is sent, and the login/booking verification gates are
+  // skipped. Parsed explicitly (NOT z.coerce.boolean(), which treats the string
+  // "false" as true): only "false"/"0"/"no"/"off" disable it.
+  EMAIL_VERIFICATION_REQUIRED: z
+    .string()
+    .default("true")
+    .transform((v) => !["false", "0", "no", "off"].includes(v.trim().toLowerCase())),
 });
 
 const parsed = EnvSchema.safeParse(process.env);
