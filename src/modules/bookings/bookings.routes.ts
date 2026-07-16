@@ -2,6 +2,7 @@ import { Router } from "express";
 import { asyncHandler } from "../../utils/async-handler";
 import { authenticate } from "../../middleware/authenticate";
 import { authorize } from "../../middleware/authorize";
+import { requireEmailVerified } from "../../middleware/require-verified";
 import { validate } from "../../middleware/validate";
 import { bookingsController } from "./bookings.controller";
 import {
@@ -17,8 +18,10 @@ export const bookingsRouter = Router();
 // All booking routes require authentication.
 bookingsRouter.use(authenticate);
 
+// Creating a booking is a protected business action: require a verified email.
 bookingsRouter.post(
   "/",
+  requireEmailVerified,
   validate({ body: createBookingSchema }),
   asyncHandler(bookingsController.create),
 );

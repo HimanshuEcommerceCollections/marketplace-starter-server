@@ -49,6 +49,19 @@ const EnvSchema = z.object({
   STRIPE_SECRET_KEY: z.string().optional(),
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
   STRIPE_PUBLISHABLE_KEY: z.string().optional(),
+
+  // Email (Resend). RESEND_API_KEY is optional (Stripe precedent) so the app
+  // still boots in dev/test without it — email-dependent flows (verification)
+  // surface a 501 until it is set. EMAIL_FROM must be a Resend-verified sender
+  // in production; the default uses Resend's shared onboarding sender, which
+  // only delivers to the account owner (fine for local testing). APP_URL is the
+  // FRONTEND base used to build the clickable verification link, and
+  // EMAIL_VERIFICATION_TTL_MS controls how long a verification token stays valid
+  // (default 24h).
+  RESEND_API_KEY: z.string().optional(),
+  EMAIL_FROM: z.string().default("Elevate Health & Wellness <onboarding@resend.dev>"),
+  APP_URL: z.string().url().default("http://localhost:3000"),
+  EMAIL_VERIFICATION_TTL_MS: z.coerce.number().int().positive().default(86_400_000),
 });
 
 const parsed = EnvSchema.safeParse(process.env);

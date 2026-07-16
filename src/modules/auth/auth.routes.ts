@@ -2,9 +2,15 @@ import { Router } from "express";
 import { asyncHandler } from "../../utils/async-handler";
 import { authenticate } from "../../middleware/authenticate";
 import { validate } from "../../middleware/validate";
-import { authRateLimiter } from "../../middleware/rate-limit";
+import { authRateLimiter, verifyRateLimiter } from "../../middleware/rate-limit";
 import { authController } from "./auth.controller";
-import { registerSchema, loginSchema, refreshSchema } from "./auth.validation";
+import {
+  registerSchema,
+  loginSchema,
+  refreshSchema,
+  verifyEmailSchema,
+  resendVerificationSchema,
+} from "./auth.validation";
 
 export const authRouter = Router();
 
@@ -31,3 +37,27 @@ authRouter.post(
   asyncHandler(authController.logout),
 );
 authRouter.get("/me", authenticate, asyncHandler(authController.me));
+
+// Public: the token in the body is itself the credential.
+authRouter.post(
+  "/verify-email",
+  verifyRateLimiter,
+  validate({ body: verifyEmailSchema }),
+  asyncHandler(authController.verifyEmail),
+);
+
+// Authenticated resend (logged-in-but-unverified user; no body).
+authRouter.post(
+  "/resend-verification",
+  verifyRateLimiter,
+  authenticate,
+  asyncHandler(authController.resendVerification),
+);
+
+// Unauthenticated resend by email (e.g. session expired); enumeration-safe.
+authRouter.post(
+  "/resend-verification/public",
+  verifyRateLimiter,
+  validate({ body: resendVerificationSchema }),
+  asyncHandler(authController.resendVerificationPublic),
+);
