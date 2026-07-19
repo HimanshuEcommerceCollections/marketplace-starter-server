@@ -32,6 +32,13 @@ function generateReference(): string {
   return `BK-${time}-${rand}`;
 }
 
+/** Statuses from which no further status change is allowed. */
+const TERMINAL_BOOKING_STATUSES: BookingStatus[] = [
+  BookingStatus.COMPLETED,
+  BookingStatus.CANCELLED,
+  BookingStatus.NO_SHOW,
+];
+
 export class BookingsService {
   /** Customer books a service; price/currency are snapshotted from the service. */
   async create(customerId: string, dto: CreateBookingDto) {
@@ -159,7 +166,18 @@ export class BookingsService {
   /** Staff status transition (admin/coordinator). Notifies the customer when the
    *  booking is confirmed or rejected (cancelled). */
   async updateStatus(id: string, dto: UpdateBookingStatusDto) {
-    await this.findOwned(id); // 404s if it doesn't exist
+    const booking = await this.findOwned(id); // 404s if it doesn't exist
+    // A terminal booking is settled — reject any further transition so a stale
+    // client (or a direct API call) can't resurrect or re-notify it.
+    if (TERMINAL_BOOKING_STATUSES.includes(booking.status)) {
+      throw ApiError.badRequest(
+        `Booking is ${booking.status.toLowerCase()} and can no longer change status`,
+      );
+    }
+    // No-op transitions would re-fire the customer notification below; block them.
+    if (booking.status === dto.status) {
+      throw ApiError.badRequest(`Booking is already ${dto.status.toLowerCase()}`);
+    }
     await bookingsRepository.update(id, { status: dto.status });
     const fresh = await this.refetch(id);
     try {
