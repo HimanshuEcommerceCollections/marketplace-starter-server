@@ -1,28 +1,34 @@
 import fs from "fs";
 import path from "path";
 import { env } from "./env";
-import { SERVICES_DIR_NAME, DEFAULT_ASSETS_SLUG } from "./upload.config";
 import { getServiceImageDefault } from "./service-image-defaults";
 
 /**
  * Service presentation assets (a single SVG icon + ordered cover images) are
- * NOT stored in the database (per product spec). They are managed on the
- * filesystem and indexed by service `slug` in a JSON registry that is read on
- * every serialize and rewritten whenever an admin changes assets.
+ * NOT stored in the database (per product spec). They are static files served
+ * from the Next.js client's public/ dir and resolved here by service `slug`.
  *
- * Why JSON (not a TS module): this registry must be MUTATED and persisted at
- * runtime. A statically-imported `const` is frozen into the compiled bundle and
- * cannot be updated, so a writable store has to be a data file. The path is
- * configurable; it defaults to <cwd>/data/service-assets.json (outside the
- * web-served public/ dir). An in-memory cache keyed on mtime keeps resolves
- * cheap while still picking up out-of-band edits to the file.
+ * READ-ONLY. There is no upload/asset-management API: image and icon files are
+ * committed assets, changed only by editing the repo. This module resolves a
+ * slug to its URLs and never writes.
+ *
+ * The JSON registry read below is a legacy runtime store written by the former
+ * asset-upload API. It is still read (and takes priority) so any deployment
+ * that accumulated entries keeps rendering exactly the same images; nothing
+ * writes to it any more. Absent/malformed → empty, so resolution falls through
+ * to the committed defaults. An mtime-keyed cache keeps resolves cheap.
  *
  * NOTE: distinct from `config/service-assets.ts`, which is the (separate) lucide
- * icon-NAME map used by the booking-config serializer. This file holds the real
- * uploaded icon/cover image URLs.
+ * icon-NAME map used by the booking-config serializer.
  */
 
-export interface ServiceImageAssetEntry {
+/** URL + on-disk folder that all service asset folders live under. */
+const SERVICES_DIR_NAME = "services";
+
+/** Slug used for the shared fallback assets folder. */
+const DEFAULT_ASSETS_SLUG = "default";
+
+interface ServiceImageAssetEntry {
   iconPath?: string;
   coverImages?: string[];
 }
@@ -35,7 +41,7 @@ export interface ResolvedServiceImageAssets {
 type Registry = Record<string, ServiceImageAssetEntry>;
 
 /** Shared fallback used when a slug has no (or partial) registry entry. */
-export const DEFAULT_ASSETS: ResolvedServiceImageAssets = {
+const DEFAULT_ASSETS: ResolvedServiceImageAssets = {
   iconPath: `/${SERVICES_DIR_NAME}/${DEFAULT_ASSETS_SLUG}/icon.svg`,
   coverImages: [`/${SERVICES_DIR_NAME}/${DEFAULT_ASSETS_SLUG}/cover-1.svg`],
 };
@@ -61,31 +67,17 @@ function readRegistry(): Registry {
   }
 }
 
-/** Persist the registry, pretty-printed and stable-sorted for readability. */
-function writeRegistry(data: Registry): void {
-  fs.mkdirSync(path.dirname(REGISTRY_FILE), { recursive: true });
-  const sorted: Registry = {};
-  for (const key of Object.keys(data).sort()) sorted[key] = data[key];
-  fs.writeFileSync(REGISTRY_FILE, JSON.stringify(sorted, null, 2) + "\n", "utf8");
-  cache = { mtimeMs: fs.statSync(REGISTRY_FILE).mtimeMs, data: sorted };
-}
-
-/** Raw registry entry for a slug (no fallback), or undefined if none. */
-export function getServiceImageAssetEntry(slug: string): ServiceImageAssetEntry | undefined {
-  return readRegistry()[slug];
-}
-
 /**
  * Resolve a slug's assets for API responses. Field-level fallback: a service
  * with covers but no icon still gets the default icon, and vice versa.
- * Priority per field: runtime registry (uploads) → committed config
+ * Priority per field: legacy registry → committed config
  * (service-image-defaults.ts) → shared DEFAULT_ASSETS.
  */
 export function resolveServiceImageAssets(slug: string): ResolvedServiceImageAssets {
   const entry = readRegistry()[slug];
   const committed = getServiceImageDefault(slug);
   return {
-    // Priority per field: runtime upload (registry) → committed config → shared default.
+    // Priority per field: legacy registry → committed config → shared default.
     iconPath: entry?.iconPath ?? committed.iconPath ?? DEFAULT_ASSETS.iconPath,
     coverImages:
       entry?.coverImages && entry.coverImages.length > 0
@@ -94,32 +86,4 @@ export function resolveServiceImageAssets(slug: string): ResolvedServiceImageAss
           ? committed.coverImages
           : DEFAULT_ASSETS.coverImages,
   };
-}
-
-/** Create/overwrite a slug's registry entry. Empty entries are pruned. */
-export function upsertServiceImageAssetEntry(
-  slug: string,
-  entry: ServiceImageAssetEntry,
-): void {
-  const data = readRegistry();
-  const hasIcon = Boolean(entry.iconPath);
-  const hasCovers = Boolean(entry.coverImages && entry.coverImages.length > 0);
-  if (!hasIcon && !hasCovers) {
-    delete data[slug];
-  } else {
-    data[slug] = {
-      ...(hasIcon ? { iconPath: entry.iconPath } : {}),
-      ...(hasCovers ? { coverImages: entry.coverImages } : {}),
-    };
-  }
-  writeRegistry(data);
-}
-
-/** Remove a slug's registry entry entirely. */
-export function removeServiceImageAssetEntry(slug: string): void {
-  const data = readRegistry();
-  if (slug in data) {
-    delete data[slug];
-    writeRegistry(data);
-  }
 }

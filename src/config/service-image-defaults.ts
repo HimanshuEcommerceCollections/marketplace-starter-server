@@ -1,12 +1,11 @@
 /**
  * Committed per-service image defaults (icon + cover image URLs).
  *
- * This is the SOURCE OF TRUTH for service icons/covers in production. Unlike the
- * runtime registry (data/service-assets.json) — which is gitignored and lives on
- * the server's ephemeral disk, so it is empty after every deploy — this is a
- * committed TS module that ships with the build and is always present. Admin
- * uploads (when wired to durable storage) override these per-service at runtime
- * via the registry; absent an override, these committed paths are used.
+ * This is the SOURCE OF TRUTH for service icons/covers. There is no upload API:
+ * icons and covers are read-only committed assets, changed only by editing this
+ * map and committing the matching file. A legacy registry
+ * (data/service-assets.json) is still read and still takes priority if present,
+ * but nothing writes it any more — see config/service-image-assets.ts.
  *
  * Each path is a ROOT-RELATIVE URL served by the Next.js client from its public/
  * folder. e.g. "/services/massage/icon.svg" resolves to

@@ -31,15 +31,14 @@ const EnvSchema = z.object({
   RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(900_000),
   RATE_LIMIT_MAX: z.coerce.number().int().positive().default(100),
 
-  // Service assets. Uploaded icon/cover files are written under
-  // <ASSET_STORAGE_DIR>/services/<slug>/ and served at the matching
-  // /services/<slug>/... URL. Defaults to the Next.js client's public/ dir
-  // (sibling package) so the frontend serves them directly with no CORS or
-  // origin juggling. The mutable asset registry (slug -> paths) is a JSON file
-  // — NOT a TS module — because it must be read AND written at runtime; a
-  // statically-imported const cannot be mutated and persisted. See
+  // Service assets are static files committed to the Next.js client's public/
+  // dir and served from there; there is no upload API. SERVICE_ASSETS_FILE
+  // points at the legacy JSON registry (slug -> paths) left over from that API.
+  // It is still READ (and takes priority) so any deployment that accumulated
+  // entries keeps rendering the same images; nothing writes it. Unset is normal
+  // and falls back to <cwd>/data/service-assets.json; when that file is absent
+  // (the usual case) resolution uses the committed defaults. See
   // src/config/service-image-assets.ts.
-  ASSET_STORAGE_DIR: z.string().optional(),
   SERVICE_ASSETS_FILE: z.string().optional(),
 
   // Stripe payments. Optional so the app still boots without them (dev/test):
