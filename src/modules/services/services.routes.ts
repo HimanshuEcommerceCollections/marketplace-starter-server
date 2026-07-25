@@ -5,7 +5,6 @@ import { authorize } from "../../middleware/authorize";
 import { validate } from "../../middleware/validate";
 import { servicesController } from "./services.controller";
 import { serviceConfigRouter } from "./config/service-config.routes";
-import { serviceAssetsRouter } from "./assets/service-assets.routes";
 import {
   createServiceSchema,
   updateServiceSchema,
@@ -17,11 +16,6 @@ import {
 import { UserRole } from "../../enums";
 
 export const servicesRouter = Router();
-
-// Asset management (icon + cover images), scoped by slug. Mounted near the top
-// so the asset surface is easy to find; its 2-segment paths are distinct from
-// the "/:id" routes below.
-servicesRouter.use("/:slug/assets", serviceAssetsRouter);
 
 // Nested service-configuration sub-router (groups + options) — owns
 // /services/:serviceId/config/*.
