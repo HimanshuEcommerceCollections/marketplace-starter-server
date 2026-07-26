@@ -146,6 +146,23 @@ export class PaymentsService {
   ) {
     const event = provider.verifyAndParseEvent(rawBody, signature);
 
+    // The provider account is shared with sibling projects, and a shared account
+    // delivers every subscribed event to every registered endpoint — so a good
+    // chunk of what arrives here belongs to another project. Drop those before
+    // they touch the DB: no ledger row (ignoring is inherently idempotent), no
+    // error log. Only a tag that is PRESENT and MISMATCHED is discarded; an
+    // absent tag falls through to the lookup below so payments created before
+    // tagging existed still settle correctly.
+    if (event.projectTag && event.projectTag !== env.PAYMENT_PROJECT_TAG) {
+      logger.debug("Ignoring webhook event from another project", {
+        provider: provider.name,
+        eventId: event.id,
+        type: event.type,
+        projectTag: event.projectTag,
+      });
+      return { received: true, ignored: true };
+    }
+
     if (await paymentsRepository.findWebhookEvent(event.id)) {
       logger.info("Ignoring duplicate webhook event", {
         provider: provider.name,
@@ -168,7 +185,10 @@ export class PaymentsService {
 
     const payment = await paymentsRepository.findByExternalId(event.externalId);
     if (!payment) {
-      logger.error("Webhook references an unknown payment", {
+      // Not an error: with the project guard above, reaching here means an
+      // UNTAGGED event we can't attribute — typically a sibling project on the
+      // shared account that doesn't stamp metadata.project.
+      logger.warn("Webhook references an unknown payment", {
         eventId: event.id,
         externalId: event.externalId,
       });
