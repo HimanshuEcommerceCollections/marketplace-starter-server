@@ -7,6 +7,8 @@ import { ApiError } from "../../utils/api-error";
 import { logger } from "../../utils/logger";
 import { buildPagination, buildMeta } from "../../utils/pagination";
 import { notificationsService } from "../notifications";
+import { coverageService } from "../coverage";
+import { legacyAreaForSlug } from "../../utils/legacy-area";
 import { BookingStatus, ServiceStatus } from "../../enums";
 import type {
   CreateBookingDto,
@@ -50,6 +52,26 @@ export class BookingsService {
       throw ApiError.badRequest("scheduledEnd must be after scheduledStart");
     }
 
+    // GUARD 1 — resolve and validate the location mode BEFORE the coverage gate.
+    // `mode` is a gate INPUT: coverage does not apply to REMOTE sessions, so an
+    // unvalidated `{ locationMode: "REMOTE" }` in a request body would otherwise
+    // walk straight past every gate, rule and default-deny in the coverage module.
+    const mode = dto.locationMode ?? service.locationMode;
+    const offered = service.locationModes.length > 0 ? service.locationModes : [service.locationMode];
+    if (!offered.includes(mode)) {
+      throw ApiError.badRequest("This service is not offered in that location mode");
+    }
+
+    // GUARD 2 — coverage. Runs BEFORE quotePrice on purpose: do not pay a pricing
+    // round trip for a booking that is about to be rejected. Throws a
+    // user-friendly error on a deny; returns exactly the columns persisted below.
+    const coverage = await coverageService.assertServiceable({
+      service,
+      zip: dto.postalCode,
+      mode,
+      requestedAreaId: undefined,
+    });
+
     // "Option A" pricing: validate the selected options against the service's
     // configuration and snapshot the breakdown. With no selections this still
     // enforces any required groups and yields the base price.
@@ -62,8 +84,16 @@ export class BookingsService {
       providerId: service.providerId,
       priceAmount: quote.total,
       currency: service.currency,
-      locationMode: dto.locationMode ?? service.locationMode,
-      area: dto.area,
+      locationMode: mode,
+      // Coverage: FKs + snapshots, resolved from the customer's ZIP above.
+      areaId: coverage.areaId,
+      zipCodeId: coverage.zipCodeId,
+      postalCode: coverage.postalCode,
+      areaNameSnapshot: coverage.areaNameSnapshot,
+      coverageSource: coverage.coverageSource,
+      // Legacy enum, dual-written until the contract migration drops the column.
+      // Null for admin-created areas that have no enum member — that is correct.
+      area: legacyAreaForSlug(coverage.areaSlug),
       scheduledStart: dto.scheduledStart,
       scheduledEnd: dto.scheduledEnd,
       notes: dto.notes,
@@ -80,6 +110,8 @@ export class BookingsService {
           email: dto.contact?.email,
           phone: dto.contact?.phone,
           address: dto.address,
+          // The ZIP exactly as the customer typed it, beside the address they typed.
+          postalCode: coverage.postalCode,
         },
       },
     });

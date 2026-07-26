@@ -10,6 +10,9 @@ import { reviewsRouter } from "../modules/reviews";
 import { adminRouter } from "../modules/admin";
 import { paymentsRouter } from "../modules/payments";
 import { corporateInquiryRouter } from "../modules/corporateInquiry";
+import { areasRouter } from "../modules/areas";
+import { zipCodesRouter } from "../modules/zipCodes";
+import { coverageRouter } from "../modules/coverage";
 
 /** API v1 router — aggregates every feature module under one mount point. */
 export const apiRouter = Router();
@@ -34,3 +37,10 @@ apiRouter.use("/reviews", reviewsRouter);
 apiRouter.use("/admin", adminRouter);
 apiRouter.use("/payments", paymentsRouter);
 apiRouter.use("/corporate-inquiries", corporateInquiryRouter);
+
+// Service coverage: admin-managed geography (areas + their ZIP codes) and the
+// per-service availability rules resolved from them at booking time. `/coverage`
+// also carries the public ZIP availability check the booking flow calls.
+apiRouter.use("/areas", areasRouter);
+apiRouter.use("/zip-codes", zipCodesRouter);
+apiRouter.use("/coverage", coverageRouter);

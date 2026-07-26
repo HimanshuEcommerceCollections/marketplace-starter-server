@@ -5,6 +5,7 @@ import { authorize } from "../../middleware/authorize";
 import { validate } from "../../middleware/validate";
 import { servicesController } from "./services.controller";
 import { serviceConfigRouter } from "./config/service-config.routes";
+import { serviceCoverageRouter } from "../coverage/coverage.routes";
 import {
   createServiceSchema,
   updateServiceSchema,
@@ -20,6 +21,11 @@ export const servicesRouter = Router();
 // Nested service-configuration sub-router (groups + options) — owns
 // /services/:serviceId/config/*.
 servicesRouter.use("/:serviceId/config", serviceConfigRouter);
+
+// Per-service coverage rules (which areas / ZIPs this service is available in) —
+// owns /services/:serviceId/coverage/*. Mounted before the "/:id" routes below;
+// its 2-segment paths are distinct from them.
+servicesRouter.use("/:serviceId/coverage", serviceCoverageRouter);
 
 // Public list — role-aware: anonymous callers see publicly-visible services
 // (ACTIVE + COMING_SOON) only; staff see all and may filter by any status.
