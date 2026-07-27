@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { Brand, ServiceArea } from "../../enums";
+import { Brand } from "../../enums";
 
 /**
  * Accepts the Client's lowercase brand slug (e.g. "elevate" from
@@ -16,12 +16,11 @@ export const registerSchema = z.object({
   password: z.string().min(8, "Password must be at least 8 characters"),
   phone: z.string().min(5).optional(),
   brand: brandSchema,
-  // Coverage area is multi-value: a customer may select several Wake County
-  // towns. At least one is required at signup.
-  area: z
-    .array(z.nativeEnum(ServiceArea))
-    .min(1, "Select at least one area")
-    .max(12),
+  // NOTE: no `area` field. Coverage is a property of a BOOKING (resolved from the
+  // customer's ZIP at booking time), not of an account. This is a non-strict
+  // z.object and `validate` replaces req.body with the parsed output, so an
+  // already-deployed client still sending `area` has it silently stripped rather
+  // than 422'd.
 });
 
 export const loginSchema = z.object({

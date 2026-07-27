@@ -19,6 +19,29 @@ const OPEN_INTENT_STATUSES = new Set([
   "processing",
 ]);
 
+/** Metadata key carrying PAYMENT_PROJECT_TAG on every intent we create. */
+const PROJECT_TAG_KEY = "project";
+
+/**
+ * Read our project tag off a Stripe object. Both PaymentIntent and Charge carry
+ * `metadata` (Stripe copies a PaymentIntent's metadata onto its Charge), which
+ * covers every event kind we act on. Returns null for objects without the tag —
+ * a sibling project that doesn't tag, or one of our own pre-tagging payments.
+ */
+function readProjectTag(object: unknown): string | null {
+  const metadata = (object as { metadata?: Stripe.Metadata | null } | null)?.metadata;
+  return metadata?.[PROJECT_TAG_KEY] ?? null;
+}
+
+/**
+ * Namespace an idempotency key with the project tag. Stripe scopes these per
+ * ACCOUNT, so on a shared account an unprefixed key (e.g. "intent_1") could
+ * match a sibling project's request and hand back ITS intent.
+ */
+function scopedKey(key: string): string {
+  return `${env.PAYMENT_PROJECT_TAG}_${key}`;
+}
+
 export class StripeProvider implements PaymentProvider {
   readonly name = "stripe";
   readonly signatureHeader = "stripe-signature";
@@ -30,9 +53,23 @@ export class StripeProvider implements PaymentProvider {
         amount: params.amount,
         currency: params.currency.toLowerCase(),
         automatic_payment_methods: { enabled: true },
-        metadata: { bookingId: params.bookingId, paymentId: params.paymentId },
+        // Brands the Dashboard row, exports, and the customer's receipt.
+        description: `${env.PAYMENT_BRAND_NAME} — booking ${params.bookingId}`,
+        // Appended to the account's descriptor prefix on the card statement.
+        // NOTE: plain `statement_descriptor` is rejected for card charges — the
+        // suffix is the only per-payment control.
+        ...(env.STRIPE_STATEMENT_DESCRIPTOR_SUFFIX
+          ? { statement_descriptor_suffix: env.STRIPE_STATEMENT_DESCRIPTOR_SUFFIX }
+          : {}),
+        metadata: {
+          [PROJECT_TAG_KEY]: env.PAYMENT_PROJECT_TAG,
+          brand: env.PAYMENT_BRAND_NAME,
+          env: env.NODE_ENV,
+          bookingId: params.bookingId,
+          paymentId: params.paymentId,
+        },
       },
-      { idempotencyKey: params.idempotencyKey },
+      { idempotencyKey: scopedKey(params.idempotencyKey) },
     );
     if (!intent.client_secret) {
       throw ApiError.internal("Stripe did not return a client secret");
@@ -80,14 +117,18 @@ export class StripeProvider implements PaymentProvider {
         payment_intent: params.externalId,
         ...(params.amount ? { amount: params.amount } : {}),
       },
-      { idempotencyKey: params.idempotencyKey },
+      { idempotencyKey: scopedKey(params.idempotencyKey) },
     );
     return { externalId: refund.id, status: refund.status ?? "pending" };
   }
 
   /** Map Stripe's event taxonomy onto our neutral ProviderEvent shape. */
   private static mapEvent(event: Stripe.Event): ProviderEvent {
-    const base = { id: event.id, type: event.type };
+    const base = {
+      id: event.id,
+      type: event.type,
+      projectTag: readProjectTag(event.data.object),
+    };
     switch (event.type) {
       case "payment_intent.succeeded": {
         const pi = event.data.object as Stripe.PaymentIntent;

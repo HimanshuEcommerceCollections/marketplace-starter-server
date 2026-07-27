@@ -6,7 +6,19 @@ export const createBookingSchema = z.object({
   scheduledStart: z.coerce.date(),
   scheduledEnd: z.coerce.date(),
   locationMode: z.nativeEnum(LocationMode).optional(),
-  // Wake County town the session takes place in (optional).
+  /**
+   * The customer's ZIP — the authoritative coverage input. The server resolves the
+   * Area FROM this, so a client cannot pick a market its ZIP does not belong to.
+   * Kept `.optional()` at the schema level because REMOTE bookings have no
+   * service address; the coverage gate is what requires it for ONSITE/HYBRID.
+   * Normalized to 5 digits by the gate (see src/utils/zip.ts).
+   */
+  postalCode: z.string().trim().max(16).optional(),
+  /**
+   * DEPRECATED: the legacy town enum. Accepted only so already-deployed clients
+   * keep working; it is treated as a HINT and is overridden by whatever
+   * `postalCode` resolves to. Do not add new senders.
+   */
   area: z.nativeEnum(ServiceArea).optional(),
   notes: z.string().max(2000).optional(),
   // Selected configuration option ids; price = base + their modifiers.

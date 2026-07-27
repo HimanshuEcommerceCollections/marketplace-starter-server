@@ -108,6 +108,39 @@ enum ConfigStatus {
   INACTIVE
 }
 
+/// Lifecycle for admin-managed geography (Area, ZipCode).
+///   ACTIVE   — live and bookable.
+///   INACTIVE — temporarily paused. Still visible and editable in admin.
+///   ARCHIVED — retired / created by mistake. Hidden from admin lists unless
+///              ?status=ARCHIVED. NOT deletable, and it KEEPS its unique
+///              name/slug/zipCode slot — restore it, don't recreate it.
+/// There is deliberately no `deletedAt` column: this repo has zero soft-delete
+/// precedent, and soft delete + unique keys requires a partial unique index that
+/// Prisma cannot express (and which `prisma db push` would silently drop).
+enum GeoStatus {
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+}
+
+/// A coverage rule's verdict. Rules are evaluated MOST-SPECIFIC-FIRST (the ZIP
+/// tier beats the AREA tier) and the first NON-NULL effect wins outright.
+/// No effect at any tier = DENY. See coverage.service.ts resolve().
+enum CoverageEffect {
+  ALLOW
+  DENY
+}
+
+/// Which tier actually authorised a booking. Stamped on Booking so reporting can
+/// tell "a ZIP proved the area" apart from "the customer picked the area and the
+/// ZIP was unrecognised". Without this, revenue-by-area silently blends the two.
+enum CoverageSource {
+  ZIP_RULE // an explicit ServiceZipCoverage ALLOW
+  AREA_RULE // inherited from ServiceAreaCoverage ALLOW
+  AREA_FALLBACK // ZIP unknown; allowed against the caller-supplied areaId
+  NOT_APPLICABLE // REMOTE booking — coverage does not apply
+}
+
 enum NotificationType {
   BOOKING_CONFIRMED
   BOOKING_CANCELLED
@@ -238,12 +271,21 @@ model Service {
   badges        String[]       @default([]) // client `badges`
   locationModes LocationMode[] @default([]) // full set offered (booking picks one)
 
+  /// Bumped on EVERY coverage write, inside the same transaction. The coverage
+  /// editor echoes the version it read; a mismatch is a loud 409 instead of a
+  /// silent lost update. Two coordinators editing different areas of the same
+  /// service is the normal case, and without this the second write reverts the
+  /// first — invisibly, because coverage is only observable by resolving a ZIP.
+  coverageVersion Int @default(0)
+
   provider          ServiceProvider?     @relation(fields: [providerId], references: [id])
   bookings          Booking[]
   reviews           Review[]
   availabilitySlots AvailabilitySlot[]
   waitlistEntries   WaitlistEntry[]
   configGroups      ServiceConfigGroup[]
+  areaCoverage      ServiceAreaCoverage[]
+  zipCoverage       ServiceZipCoverage[]
 
   @@index([providerId])
   @@index([status])
@@ -294,6 +336,160 @@ model ServiceConfigOption {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
+// Geography & coverage
+// ────────────────────────────────────────────────────────────────────────────
+
+/// An admin-managed OPERATING MARKET — the unit the business staffs, prices and
+/// dispatches from. Replaces the ServiceArea enum 1:1.
+///
+/// An Area is NOT a legal boundary and is NEVER itself bookable: it supplies the
+/// DEFAULT coverage verdict for the ZIPs beneath it. Only a ZipCode is bookable.
+/// "We serve 27502 out of the Apex market" is a business decision (single-valued,
+/// reversible with one UPDATE); "27502 is in Apex" is a geographic claim that is
+/// only partly true and which this model deliberately does not make.
+///
+/// INVARIANT: geography is exactly TWO levels — Area -> ZipCode. There is no
+/// `parentId` and no `type`. Everything on the roadmap (states, counties, cities,
+/// neighborhoods, zones) is a LABEL on one of these two rows or a GROUPING beside
+/// them — never a third level of availability resolution.
+model Area {
+  id          String    @id @default(uuid())
+  name        String    @unique
+  slug        String    @unique // lowercase kebab, from src/utils/slugify.ts
+  stateCode   String    @default("NC") // USPS 2-letter, uppercase
+  countryCode String    @default("US") // ISO-3166-1 alpha-2
+  timezone    String    @default("America/New_York") // IANA; operating-hours-by-area needs it
+  status      GeoStatus @default(ACTIVE)
+  sortOrder   Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  zipCodes        ZipCode[]
+  serviceCoverage ServiceAreaCoverage[]
+  bookings        Booking[]
+
+  @@index([status, sortOrder])
+}
+
+/// A 5-digit USPS ZIP owned by exactly ONE Area. `zipCode` is GLOBALLY unique
+/// because booking validation resolves an Area FROM a customer-typed ZIP, and
+/// that is only deterministic with a single owner.
+///
+/// `zipCode` is TEXT, never Int: "07001" must not become 7001. Canonical form is
+/// exactly 5 ASCII digits; ZIP+4 is truncated at the zod boundary and backstopped
+/// by the ZipCode_zipCode_us_format_check CHECK constraint.
+model ZipCode {
+  id          String    @id @default(uuid())
+  areaId      String
+  zipCode     String    @unique
+  city        String? // USPS preferred city. DISPLAY ONLY — never resolves an Area.
+  stateCode   String    @default("NC")
+  countryCode String    @default("US")
+  status      GeoStatus @default(ACTIVE)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  // Restrict, not Cascade: an Area with ZIPs must not be deletable. Retirement is
+  // status = ARCHIVED, which is also the only path Booking's Restrict FK permits.
+  area            Area                 @relation(fields: [areaId], references: [id], onDelete: Restrict)
+  serviceCoverage ServiceZipCoverage[]
+  bookings        Booking[]
+
+  // Target of the COMPOSITE foreign key on ServiceZipCoverage. This is what pins
+  // a zip-level coverage rule to the area it was authored under, so a ZIP cannot
+  // be moved out from under a rule. Not a business constraint — a
+  // referential-integrity anchor.
+  @@unique([id, areaId])
+  @@index([areaId, status])
+
+  // Prefix search. Under the en_US.UTF-8 collation Supabase defaults to, a plain
+  // btree CANNOT serve LIKE 'x%', so text_pattern_ops is declared explicitly.
+  // These are the difference between an index scan and a seq scan on every
+  // debounced keystroke in the admin ZIP search and coverage picker.
+  @@index([zipCode(ops: raw("text_pattern_ops"))])
+  @@index([areaId, zipCode(ops: raw("text_pattern_ops"))])
+  @@index([city(ops: raw("text_pattern_ops"))])
+}
+
+/// Service <-> Area coverage rule — the DEFAULT tier.
+///   effect = ALLOW  -> every ACTIVE ZIP in this area is covered UNLESS that ZIP
+///                      carries its own rule for this service.
+///   effect = DENY   -> the area is NOT covered area-wide; only ZIPs carrying an
+///                      explicit ALLOW are covered.
+///   effect = NULL   -> this row carries NO coverage verdict. Reserved for rows
+///                      that exist only to hang future per-area payload
+///                      (priceAdjustmentAmount, serviceFeeAmount) off. NULL is
+///                      TRANSPARENT to resolution: COALESCE skips it. A CHECK
+///                      constraint forbids NULL today; widening it when a payload
+///                      column lands is a one-line migration.
+///
+/// Absence of a row entirely = the service was never configured for this area.
+/// Resolution treats that identically to DENY but reports NOT_CONFIGURED, which
+/// is a different customer experience (waitlist) and a different admin report.
+///
+/// CANONICAL FORM RULE: any area a service touches at ALL must have a row here.
+/// Writing a ServiceZipCoverage row for a (service, area) pair with no
+/// ServiceAreaCoverage row is rejected by the service layer.
+model ServiceAreaCoverage {
+  id        String          @id @default(uuid())
+  serviceId String
+  areaId    String
+  effect    CoverageEffect?
+
+  /// When a NEW ZipCode is later added to this area, does this service inherit
+  /// coverage automatically?
+  ///   true  (default) -> yes. A ZIP inserted next month is covered with zero writes.
+  ///   false           -> no. Set AUTOMATICALLY the moment a DENY zip rule is
+  ///                      written for this (service, area) pair. An exclusion is
+  ///                      direct evidence the area is not uniformly serviceable,
+  ///                      so a bulk paste of ZIPs must not silently expand into it.
+  /// Enforced at ZIP-CREATE time, NOT at resolve time: the resolver stays a clean
+  /// two-tier COALESCE with no third bit.
+  autoIncludeNewZips Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  service Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  area    Area    @relation(fields: [areaId], references: [id], onDelete: Restrict)
+
+  @@unique([serviceId, areaId]) // makes contradictory area rules UNSTORABLE
+  @@index([areaId]) // reverse: "which services cover this area?"
+}
+
+/// Service <-> ZipCode coverage rule — the MOST SPECIFIC tier. Overrides the area
+/// rule for this ZIP only. Absence of a row = inherit the area rule.
+///   effect = ALLOW -> opt this ZIP in (zip-only availability, one-off ZIPs).
+///   effect = DENY  -> carve this ZIP out of an otherwise area-wide grant.
+///   effect = NULL  -> payload-only row, transparent to resolution.
+model ServiceZipCoverage {
+  id        String @id @default(uuid())
+  serviceId String
+  zipCodeId String
+
+  /// Denormalized copy of ZipCode.areaId. NOT independently editable — it is half
+  /// of the composite FK below, which pins this rule to the ZIP's area. Without
+  /// it, moving a ZIP between areas silently grants coverage in a market it was
+  /// never granted, and drags an exclusion into it as an unauthored hole. With it,
+  /// the move is REFUSED by Postgres until an admin resolves the rules explicitly.
+  areaId String
+
+  effect    CoverageEffect?
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+
+  service Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  // COMPOSITE FK. onUpdate: Restrict is the whole point — do NOT use Cascade,
+  // which would silently repoint the rule to the new area (that IS the bug).
+  zipCode ZipCode @relation(fields: [zipCodeId, areaId], references: [id, areaId], onDelete: Cascade, onUpdate: Restrict)
+
+  @@unique([serviceId, zipCodeId]) // a (service, ZIP) pair is ALLOW xor DENY, never both
+  @@index([zipCodeId]) // reverse: "which services override at this ZIP?"
+  @@index([serviceId, areaId]) // the coverage editor's per-area rule fetch
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 // Booking & scheduling
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -309,8 +505,27 @@ model Booking {
   priceAmount    Int
   currency       String        @default("USD")
   locationMode   LocationMode  @default(ONSITE)
-  // Wake County town the session takes place in (customer-selected at booking).
+  /// DEPRECATED: the legacy 12-town enum. Kept and DUAL-WRITTEN until the
+  /// contract migration drops it, so a rollback to the previous server version
+  /// still finds its read path populated. Do not add new readers.
   area           ServiceArea?
+
+  // ── Coverage: FKs for joins, snapshots for history. Both, deliberately. ──
+  // FK-only loses history (rename an Area and an old invoice retroactively
+  // rewords; re-home a ZIP and last year's revenue moves between markets).
+  // Snapshot-only loses joins ("all bookings in this area this quarter" becomes a
+  // string match across historical spellings). Carrying both is exactly what
+  // priceAmount, selections and the whole user_details table already do.
+  //
+  // areaId stays NULLABLE IN THE DATABASE FOREVER: historical bookings legitimately
+  // hold NULL (area was optional), REMOTE bookings never resolve one, and a
+  // DB-level NOT NULL would be an unrollbackable mistake. Enforcement is zod +
+  // the service layer.
+  areaId           String?
+  zipCodeId        String?
+  postalCode       String? // normalized 5-digit ZIP, snapshotted
+  areaNameSnapshot String? // Area.name as displayed at booking time
+  coverageSource   CoverageSource?
   notes          String?
   // Full schedule preferences (all preferred windows + flexibility + timezone)
   // as entered; scheduledStart/End above hold the first preferred window.
@@ -329,11 +544,22 @@ model Booking {
   // Immutable snapshot of the customer-entered "Details" step (contact + address).
   userDetails UserDetails?
 
+  // Named coverageArea / coverageZip, NOT area / zipCode: the legacy `area` enum
+  // field must survive the backfill and Prisma forbids two fields of one name.
+  // These names read correctly permanently, so there is no rename after the drop.
+  // Restrict, not the Prisma default SetNull: a booking's geography is history
+  // and must never be silently nulled.
+  coverageArea Area?    @relation(fields: [areaId], references: [id], onDelete: Restrict)
+  coverageZip  ZipCode? @relation(fields: [zipCodeId], references: [id], onDelete: Restrict)
+
   @@index([customerId])
   @@index([serviceId])
   @@index([providerId])
   @@index([status])
   @@index([scheduledStart])
+  @@index([areaId])
+  @@index([zipCodeId])
+  @@index([postalCode])
 }
 
 /// Immutable snapshot of the "Details" step a customer entered for a booking.
@@ -342,11 +568,12 @@ model UserDetails {
   id        String   @id @default(uuid())
   bookingId String   @unique
   userId    String
-  name      String?
-  email     String?
-  phone     String?
-  address   String?
-  createdAt DateTime @default(now())
+  name       String?
+  email      String?
+  phone      String?
+  address    String?
+  postalCode String? // the literal ZIP the customer typed, beside the address they typed
+  createdAt  DateTime @default(now())
 
   booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
   user    User    @relation(fields: [userId], references: [id])

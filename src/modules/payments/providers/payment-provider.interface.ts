@@ -21,6 +21,14 @@ export interface ProviderEvent {
   kind: ProviderEventKind;
   externalId: string | null; // the PaymentIntent/charge reference this event concerns
   amountRefunded?: number; // minor units, present on refund events
+  /**
+   * Which project created the payment this event concerns, as stamped by the
+   * adapter at intent time. Non-null only when the provider account is shared
+   * across projects AND the payment carries the tag; null for payments created
+   * before tagging existed (the service then falls back to a lookup rather than
+   * discarding the event). See PaymentsService.handleProviderEvent.
+   */
+  projectTag: string | null;
 }
 
 export interface CreateIntentParams {
