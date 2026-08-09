@@ -37,8 +37,22 @@ const EnvSchema = z.object({
   JWT_REFRESH_SECRET: z
     .string()
     .min(16, "JWT_REFRESH_SECRET must be at least 16 characters"),
-  JWT_ACCESS_EXPIRES_IN: z.string().default("15m"),
-  JWT_REFRESH_EXPIRES_IN: z.string().default("7d"),
+  // Expiries must be `ms`-package durations WITH a unit ("15m", "12h", "7d") —
+  // jsonwebtoken reads a bare numeral like "15" as milliseconds.
+  JWT_ACCESS_EXPIRES_IN: z
+    .string()
+    .regex(
+      /^\d+(\.\d+)?\s*(ms|msecs?|milliseconds?|s|secs?|seconds?|m|mins?|minutes?|h|hrs?|hours?|d|days?|w|weeks?|y|yrs?|years?)$/i,
+      'JWT_ACCESS_EXPIRES_IN must be a duration with a unit, e.g. "15m", "12h", "7d" (a bare number is read as milliseconds)',
+    )
+    .default("15m"),
+  JWT_REFRESH_EXPIRES_IN: z
+    .string()
+    .regex(
+      /^\d+(\.\d+)?\s*(ms|msecs?|milliseconds?|s|secs?|seconds?|m|mins?|minutes?|h|hrs?|hours?|d|days?|w|weeks?|y|yrs?|years?)$/i,
+      'JWT_REFRESH_EXPIRES_IN must be a duration with a unit, e.g. "15m", "12h", "7d" (a bare number is read as milliseconds)',
+    )
+    .default("7d"),
 
   // Security
   BCRYPT_SALT_ROUNDS: z.coerce.number().int().min(4).max(15).default(10),
@@ -96,13 +110,18 @@ const EnvSchema = z.object({
   // hosted), "resend" is Resend's HTTP API. Credentials for every adapter are
   // optional (Stripe precedent) so the app still boots without them in
   // dev/test — email-dependent flows surface a 501 naming the missing vars.
+  // Unset means "auto-detect from whichever credentials are present" (resolved
+  // below, after parsing): a box holding only RESEND_API_KEY must not silently
+  // boot the unconfigured gmail adapter — with EMAIL_VERIFICATION_REQUIRED on,
+  // that leaves every new signup unable to receive its verification email and
+  // therefore unable to ever log in.
   EMAIL_PROVIDER: z.preprocess(
     blankToUndefined,
     z
       .string()
-      .default("gmail")
       .transform((v) => v.trim().toLowerCase())
-      .pipe(z.enum(["gmail", "smtp", "resend"])),
+      .pipe(z.enum(["gmail", "smtp", "resend"]))
+      .optional(),
   ),
 
   // SMTP credentials, used by the "gmail" and "smtp" adapters. SMTP_HOST/PORT
@@ -202,7 +221,43 @@ if (!parsed.success) {
   process.exit(1);
 }
 
-export const env = parsed.data;
+/**
+ * Resolve the email adapter when EMAIL_PROVIDER is unset: prefer whichever
+ * transport actually has credentials. SMTP creds win over a Resend key (an
+ * explicit SMTP setup is the more deliberate configuration); with neither,
+ * fall back to "gmail" and let email flows 501 as before.
+ */
+function resolveEmailProviderDefault(
+  data: z.infer<typeof EnvSchema>,
+): "gmail" | "smtp" | "resend" {
+  if (data.EMAIL_PROVIDER) return data.EMAIL_PROVIDER;
+  if (data.SMTP_USER && data.SMTP_PASSWORD) {
+    return data.SMTP_HOST ? "smtp" : "gmail";
+  }
+  if (data.RESEND_API_KEY) return "resend";
+  return "gmail";
+}
+
+export const env = {
+  ...parsed.data,
+  EMAIL_PROVIDER: resolveEmailProviderDefault(parsed.data),
+};
 export const isProd = env.NODE_ENV === "production";
 export const isDev = env.NODE_ENV === "development";
 export const isTest = env.NODE_ENV === "test";
+
+// Loud (non-fatal) boot warning: in production, verification emails are the
+// gate to logging in at all. An unconfigured transport doesn't fail any env
+// check, so surface it here instead of letting signups break silently.
+if (isProd && env.EMAIL_VERIFICATION_REQUIRED) {
+  const smtpReady = Boolean(env.SMTP_USER && env.SMTP_PASSWORD);
+  const configured =
+    env.EMAIL_PROVIDER === "resend" ? Boolean(env.RESEND_API_KEY) : smtpReady;
+  if (!configured) {
+    console.error(
+      `⚠️  EMAIL_PROVIDER="${env.EMAIL_PROVIDER}" has no credentials but ` +
+        "EMAIL_VERIFICATION_REQUIRED is on — new accounts cannot verify or log in. " +
+        "Set SMTP_USER/SMTP_PASSWORD (gmail/smtp) or RESEND_API_KEY (resend).",
+    );
+  }
+}

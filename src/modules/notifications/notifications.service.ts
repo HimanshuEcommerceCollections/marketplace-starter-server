@@ -34,7 +34,9 @@ export class NotificationsService {
       userId,
       type: NotificationType.BOOKING_CONFIRMED,
       title: "Booking confirmed",
-      body: `Your payment was received and booking ${booking.reference} is confirmed.`,
+      // Sent for EVERY transition to CONFIRMED — staff confirm unpaid bookings
+      // too — so the copy must not claim a payment was received.
+      body: `Your booking ${booking.reference} has been confirmed.`,
       data: { bookingId: booking.id } as Prisma.InputJsonValue,
     });
 
@@ -53,7 +55,9 @@ export class NotificationsService {
       userId,
       type: NotificationType.BOOKING_CANCELLED,
       title: "Booking cancelled",
-      body: `Booking ${booking.reference} was cancelled following a refund.`,
+      // Sent for refund-driven cancellations AND plain staff rejections, and
+      // callers don't say which — keep the copy neutral about refunds.
+      body: `Booking ${booking.reference} has been cancelled.`,
       data: { bookingId: booking.id } as Prisma.InputJsonValue,
     });
 

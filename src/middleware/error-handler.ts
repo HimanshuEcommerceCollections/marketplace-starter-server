@@ -44,7 +44,10 @@ export function errorHandler(
       message = "Database request error";
     }
   } else if (err instanceof Error) {
-    message = err.message;
+    // Unknown errors carry internals (Prisma/Stripe/nodemailer messages, incl.
+    // hostnames); never echo them to clients in production. The real error is
+    // still logged server-side below.
+    message = isProd ? "Something went wrong" : err.message;
   }
 
   if (statusCode >= HttpStatus.INTERNAL_SERVER_ERROR) {

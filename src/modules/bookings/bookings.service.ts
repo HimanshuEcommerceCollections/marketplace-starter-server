@@ -8,6 +8,9 @@ import { logger } from "../../utils/logger";
 import { buildPagination, buildMeta } from "../../utils/pagination";
 import { notificationsService } from "../notifications";
 import { coverageService } from "../coverage";
+// Direct file import (not the module index) — payments.service imports
+// bookingsService, so pulling in the payments barrel here would be circular.
+import { releasePaymentForBooking } from "../payments/payment-release";
 import { legacyAreaForSlug } from "../../utils/legacy-area";
 import { BookingStatus, ServiceStatus } from "../../enums";
 import type {
@@ -44,12 +47,23 @@ const TERMINAL_BOOKING_STATUSES: BookingStatus[] = [
 export class BookingsService {
   /** Customer books a service; price/currency are snapshotted from the service. */
   async create(customerId: string, dto: CreateBookingDto) {
-    const service = await servicesService.getById(dto.serviceId);
+    // Customer-visibility lookup (staff=false): a DRAFT/INACTIVE service 404s
+    // exactly like a nonexistent one, so this endpoint can't be used to probe
+    // which unpublished services exist (same enumeration-resistance stance as
+    // the coverage module).
+    const service = await servicesService.getById(dto.serviceId, false);
     if (service.status !== ServiceStatus.ACTIVE) {
       throw ApiError.badRequest("This service is not currently bookable");
     }
     if (dto.scheduledEnd <= dto.scheduledStart) {
       throw ApiError.badRequest("scheduledEnd must be after scheduledStart");
+    }
+    // A slot in the past can't be delivered, but z.coerce.date() happily parses
+    // one. Small grace window so a request composed just before midnight or on
+    // a skewed client clock isn't rejected spuriously.
+    const PAST_GRACE_MS = 5 * 60 * 1000;
+    if (dto.scheduledStart.getTime() < Date.now() - PAST_GRACE_MS) {
+      throw ApiError.badRequest("scheduledStart cannot be in the past");
     }
 
     // GUARD 1 — resolve and validate the location mode BEFORE the coverage gate.
@@ -211,6 +225,10 @@ export class BookingsService {
       throw ApiError.badRequest(`Booking is already ${dto.status.toLowerCase()}`);
     }
     await bookingsRepository.update(id, { status: dto.status });
+    if (dto.status === BookingStatus.CANCELLED) {
+      // Staff rejection: release any open payment intent (see cancel()).
+      await releasePaymentForBooking(id);
+    }
     const fresh = await this.refetch(id);
     try {
       if (dto.status === BookingStatus.CONFIRMED) {
@@ -229,7 +247,18 @@ export class BookingsService {
     if (booking.status === BookingStatus.CANCELLED) {
       throw ApiError.badRequest("Booking is already cancelled");
     }
+    // Same terminal guard as updateStatus: a COMPLETED (delivered, counted as
+    // revenue) or NO_SHOW booking is settled history — a customer cancel must
+    // not be able to rewrite it.
+    if (TERMINAL_BOOKING_STATUSES.includes(booking.status)) {
+      throw ApiError.badRequest(
+        `Booking is ${booking.status.toLowerCase()} and can no longer be cancelled`,
+      );
+    }
     await bookingsRepository.update(id, { status: BookingStatus.CANCELLED });
+    // Kill any open payment intent so a still-open checkout tab can't charge
+    // for the booking that was just cancelled. Best-effort by design.
+    await releasePaymentForBooking(id);
     return this.serialize(await this.refetch(id));
   }
 

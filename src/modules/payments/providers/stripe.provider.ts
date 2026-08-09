@@ -92,6 +92,31 @@ export class StripeProvider implements PaymentProvider {
     }
   }
 
+  async cancelIntent(externalId: string): Promise<void> {
+    const stripe = getStripeClient();
+    try {
+      await stripe.paymentIntents.cancel(externalId);
+    } catch {
+      // Already succeeded/canceled, or unknown id — nothing left to release.
+      // Best-effort by contract: the caller is cancelling a booking and must
+      // not fail because the intent can't be cancelled anymore.
+    }
+  }
+
+  async retrieveRefundedTotal(externalId: string): Promise<number | null> {
+    const stripe = getStripeClient();
+    try {
+      const intent = await stripe.paymentIntents.retrieve(externalId, {
+        expand: ["latest_charge"],
+      });
+      const charge = intent.latest_charge;
+      if (charge && typeof charge !== "string") return charge.amount_refunded;
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
   verifyAndParseEvent(rawBody: Buffer | string, signature: string): ProviderEvent {
     const stripe = getStripeClient();
     if (!env.STRIPE_WEBHOOK_SECRET) {

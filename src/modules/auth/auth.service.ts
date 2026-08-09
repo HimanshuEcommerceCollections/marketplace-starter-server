@@ -29,6 +29,20 @@ function toAuthUser(user: User): AuthUser {
 }
 
 export class AuthService {
+  /**
+   * Reject admin-disabled accounts. Checked on login AND refresh so a
+   * suspension/deactivation actually cuts off access — without the refresh-side
+   * check a disabled user could keep rotating refresh tokens indefinitely.
+   */
+  private assertAccountEnabled(user: User): void {
+    if (user.status === UserStatus.SUSPENDED) {
+      throw ApiError.forbidden("This account has been suspended");
+    }
+    if (user.status === UserStatus.INACTIVE) {
+      throw ApiError.forbidden("This account is inactive");
+    }
+  }
+
   private async issueTokens(user: User): Promise<AuthTokens> {
     const accessToken = signAccessToken(toAuthUser(user));
     const refreshToken = signRefreshToken({ id: user.id });
@@ -100,9 +114,7 @@ export class AuthService {
 
     const ok = await comparePassword(dto.password, user.passwordHash);
     if (!ok) throw ApiError.unauthorized("Invalid credentials");
-    if (user.status === UserStatus.SUSPENDED) {
-      throw ApiError.forbidden("This account has been suspended");
-    }
+    this.assertAccountEnabled(user);
     // Verification gate: unverified accounts cannot sign in (unless the feature
     // is disabled via EMAIL_VERIFICATION_REQUIRED). The `code` lets the client
     // surface a "resend verification" affordance instead of a dead end.
@@ -133,6 +145,7 @@ export class AuthService {
 
     const user = await authRepository.findUserById(payload.id);
     if (!user) throw ApiError.unauthorized("User no longer exists");
+    this.assertAccountEnabled(user);
 
     // Rotate: revoke the used token, issue a fresh pair.
     await authRepository.revokeRefreshToken(hashToken(refreshToken));
@@ -142,6 +155,15 @@ export class AuthService {
 
   async logout(refreshToken: string): Promise<void> {
     await authRepository.revokeRefreshToken(hashToken(refreshToken));
+  }
+
+  /**
+   * Revoke every outstanding refresh token for a user. Public surface for other
+   * modules (e.g. users suspending an account) so they can terminate live
+   * sessions without reaching into auth's repository layer.
+   */
+  async revokeAllSessionsForUser(userId: string): Promise<void> {
+    await authRepository.revokeAllForUser(userId);
   }
 
   async me(userId: string) {

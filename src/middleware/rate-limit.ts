@@ -48,3 +48,40 @@ export const verifyRateLimiter = rateLimit({
     message: "Too many verification requests, please try again later.",
   },
 });
+
+/**
+ * IP-keyed companion to `verifyRateLimiter` for the PUBLIC resend endpoint.
+ * The per-email key above is attacker-supplied — rotating addresses mints a
+ * fresh bucket per request, bypassing it entirely — so this second limiter
+ * caps total requests per source IP regardless of the email in the body. Uses
+ * the default keyGenerator (req.ip, IPv6-safe). Same BFF caveat as above: one
+ * origin IP makes this effectively a global budget until the client IP is
+ * forwarded.
+ */
+export const verifyIpRateLimiter = rateLimit({
+  windowMs: env.RATE_LIMIT_WINDOW_MS,
+  limit: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    message: "Too many verification requests, please try again later.",
+  },
+});
+
+/**
+ * Limiter for anonymous public form submissions (corporate inquiries and
+ * similar lead-gen endpoints). IP-keyed via the default keyGenerator; the BFF
+ * caveat above applies here too, so the budget stays generous enough for
+ * legitimate concurrent submissions while still blunting scripted spam.
+ */
+export const publicFormRateLimiter = rateLimit({
+  windowMs: env.RATE_LIMIT_WINDOW_MS,
+  limit: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    message: "Too many submissions, please try again later.",
+  },
+});

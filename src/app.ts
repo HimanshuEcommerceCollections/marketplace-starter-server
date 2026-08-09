@@ -3,7 +3,7 @@ import express from "express";
 import helmet from "helmet";
 import morgan from "morgan";
 import { env, isTest, isProd } from "./config/env";
-import { apiRouter } from "./routes";
+import { apiRouter, healthRouter } from "./routes";
 import { paymentsWebhookRouter } from "./modules/payments";
 import { errorHandler } from "./middleware/error-handler";
 import { notFound } from "./middleware/not-found";
@@ -15,11 +15,23 @@ export function createApp() {
 
   app.disable("x-powered-by");
 
+  // Behind a reverse proxy (Render terminates TLS and forwards traffic),
+  // req.ip is the proxy's address unless Express is told to read
+  // X-Forwarded-For. Without this every visitor shares ONE rate-limit bucket —
+  // 10 failed logins by anyone lock out sign-in site-wide. `1` trusts exactly
+  // one hop (the platform proxy), so clients still can't spoof their IP.
+  app.set("trust proxy", 1);
+
   // Security & parsing
   app.use(helmet());
   app.use(
     cors({
-      origin: env.CORS_ORIGIN === "*" ? true : env.CORS_ORIGIN.split(","),
+      // Trim entries: "https://a.com, https://b.com" must not yield a
+      // " https://b.com" that never matches.
+      origin:
+        env.CORS_ORIGIN === "*"
+          ? true
+          : env.CORS_ORIGIN.split(",").map((o) => o.trim()),
       credentials: true,
     }),
   );
@@ -41,6 +53,9 @@ export function createApp() {
   if (!isTest) {
     app.use(morgan(isProd ? "combined" : "dev"));
   }
+
+  // Health probe stays OUTSIDE the rate limiter (see routes/index.ts for why).
+  app.use("/api/v1/health", healthRouter);
 
   // Rate limiting + versioned API
   app.use("/api", generalRateLimiter);

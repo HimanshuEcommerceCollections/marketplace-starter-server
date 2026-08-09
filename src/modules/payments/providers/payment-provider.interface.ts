@@ -63,6 +63,18 @@ export interface PaymentProvider {
   createIntent(params: CreateIntentParams): Promise<CreatedIntent>;
   /** Returns the client secret of an existing intent if it is still payable, else null. */
   retrieveOpenIntent(externalId: string): Promise<{ clientSecret: string } | null>;
+  /**
+   * Best-effort cancel of an open intent (e.g. its booking was cancelled) so a
+   * customer with a live client secret can no longer complete the charge. Must
+   * NOT throw when the intent is already settled/canceled/unknown.
+   */
+  cancelIntent(externalId: string): Promise<void>;
+  /**
+   * Minor units already refunded on this intent, or null when the provider
+   * can't say (no charge yet, lookup failed). Used to validate partial refunds
+   * against the remaining balance and to key repeat refunds idempotently.
+   */
+  retrieveRefundedTotal(externalId: string): Promise<number | null>;
   /** Verifies the signature against the raw body and maps to a neutral event. Throws on a bad signature. */
   verifyAndParseEvent(rawBody: Buffer | string, signature: string): ProviderEvent;
   refund(params: RefundParams): Promise<CreatedRefund>;

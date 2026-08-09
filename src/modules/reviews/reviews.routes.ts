@@ -1,6 +1,9 @@
 import { Router } from "express";
 import { asyncHandler } from "../../utils/async-handler";
-import { authenticate } from "../../middleware/authenticate";
+import {
+  authenticate,
+  optionalAuthenticate,
+} from "../../middleware/authenticate";
 import { authorize } from "../../middleware/authorize";
 import { validate } from "../../middleware/validate";
 import { reviewsController } from "./reviews.controller";
@@ -14,14 +17,19 @@ import { UserRole } from "../../enums";
 
 export const reviewsRouter = Router();
 
-// Public: read published reviews
+// Public: read published reviews. optionalAuthenticate (same pattern as
+// services.routes.ts) is what lets the controller's staff check actually see a
+// user — without it req.user is always undefined and the moderation view
+// (unpublished reviews) is unreachable.
 reviewsRouter.get(
   "/",
+  optionalAuthenticate,
   validate({ query: listReviewsSchema }),
   asyncHandler(reviewsController.list),
 );
 reviewsRouter.get(
   "/:id",
+  optionalAuthenticate,
   validate({ params: reviewIdSchema }),
   asyncHandler(reviewsController.getById),
 );

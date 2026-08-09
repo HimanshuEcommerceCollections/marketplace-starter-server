@@ -4,7 +4,13 @@ import type { Prisma } from "@prisma/client";
 /** Data-access for auth: users + refresh tokens. No business rules here. */
 export class AuthRepository {
   findUserByEmail(email: string) {
-    return prisma.user.findUnique({ where: { email } });
+    // Case-insensitive on purpose: inputs are lowercased at validation, but rows
+    // created before that normalization may still hold mixed-case emails and
+    // those users must keep authenticating. findFirst because `mode` isn't
+    // allowed on a unique lookup.
+    return prisma.user.findFirst({
+      where: { email: { equals: email, mode: "insensitive" } },
+    });
   }
 
   findUserById(id: string) {

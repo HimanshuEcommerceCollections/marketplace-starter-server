@@ -67,7 +67,11 @@ export class PaymentsService {
       currency: booking.currency,
       bookingId: booking.id,
       paymentId: payment.id,
-      idempotencyKey: `intent_${payment.id}`,
+      // Suffixed with the row's upsert timestamp: a bare `intent_<id>` would be
+      // replayed by the provider for 24h, handing back a CANCELED intent from a
+      // previous attempt and locking the customer out of paying. Duplicate
+      // intents across calls are already prevented by the reuse branch above.
+      idempotencyKey: `intent_${payment.id}_${payment.updatedAt.getTime()}`,
     });
 
     const updated = await paymentsRepository.update(payment.id, {
@@ -118,10 +122,27 @@ export class PaymentsService {
       throw ApiError.badRequest("Refund amount exceeds the payment amount");
     }
 
+    // Validate against the REMAINING balance, not the original total, so an
+    // over-refund fails here with a clear message instead of as an opaque
+    // provider error. The refunded-so-far total also keys the idempotency:
+    // a double-clicked request (state unchanged) replays safely, while a
+    // deliberate second refund of the same amount (state advanced) is a new
+    // key — with the old static key it silently never happened.
+    const refundedSoFar = await provider.retrieveRefundedTotal(payment.externalId);
+    if (
+      refundedSoFar !== null &&
+      dto.amount &&
+      dto.amount > payment.amount - refundedSoFar
+    ) {
+      throw ApiError.badRequest(
+        "Refund amount exceeds the remaining refundable balance",
+      );
+    }
+
     const refund = await provider.refund({
       externalId: payment.externalId,
       amount: dto.amount,
-      idempotencyKey: `refund_${payment.id}_${dto.amount ?? "full"}`,
+      idempotencyKey: `refund_${payment.id}_${dto.amount ?? "full"}_${refundedSoFar ?? "unknown"}`,
     });
 
     logger.info("Initiated refund", {
@@ -226,6 +247,43 @@ export class PaymentsService {
         throw ApiError.internal("Unreachable webhook event kind");
     }
 
+    // Providers do not guarantee delivery ORDER, only (at-least-once) delivery.
+    // Without this guard a late `payment_intent.succeeded` delivered after
+    // `charge.refunded` would flip a fully-refunded payment back to PAID. The
+    // event is still recorded in the ledger so its redelivery short-circuits.
+    if (this.isStaleTransition(payment.status, paymentStatus)) {
+      logger.warn("Ignoring out-of-order webhook transition", {
+        eventId: event.id,
+        type: event.type,
+        paymentId: payment.id,
+        currentStatus: payment.status,
+        eventStatus: paymentStatus,
+      });
+      await paymentsRepository.recordWebhookEvent({
+        provider: provider.name,
+        eventId: event.id,
+        type: event.type,
+      });
+      return { received: true, handled: false };
+    }
+
+    // Money captured for a booking that is no longer happening (the customer
+    // paid from a stale checkout tab, or the intent-cancel race lost). The
+    // capture is a fact — record PAID so the refund flow works — but flag it
+    // loudly: nothing else will prompt the manual refund this needs.
+    if (
+      paymentStatus === PaymentStatus.PAID &&
+      payment.booking.status === BookingStatus.CANCELLED
+    ) {
+      logger.error("Payment captured for a CANCELLED booking — needs manual refund", {
+        eventId: event.id,
+        paymentId: payment.id,
+        bookingId: payment.bookingId,
+        bookingReference: payment.booking.reference,
+        amount: payment.amount,
+      });
+    }
+
     try {
       await prisma.$transaction(async (tx) => {
         // Insert the ledger row first: the unique eventId makes concurrent
@@ -267,6 +325,32 @@ export class PaymentsService {
     await this.notify(payment, bookingStatus);
 
     return { received: true, handled: true };
+  }
+
+  /**
+   * True when applying `next` on top of `current` would move the payment
+   * BACKWARD in its lifecycle — the signature of an out-of-order webhook.
+   * Forward moves and same-status no-ops are allowed.
+   */
+  private isStaleTransition(current: PaymentStatus, next: PaymentStatus): boolean {
+    switch (current) {
+      case PaymentStatus.REFUNDED:
+        // Fully settled; nothing may follow.
+        return next !== PaymentStatus.REFUNDED;
+      case PaymentStatus.PARTIALLY_REFUNDED:
+        // Only further refund progress is meaningful.
+        return (
+          next !== PaymentStatus.REFUNDED &&
+          next !== PaymentStatus.PARTIALLY_REFUNDED
+        );
+      case PaymentStatus.PAID:
+        // A capture can only move on to refunds; a late failed/canceled event
+        // for the same intent must not un-pay it.
+        return next === PaymentStatus.FAILED || next === PaymentStatus.PENDING;
+      default:
+        // PENDING/AUTHORIZED/FAILED accept whatever the provider reports.
+        return false;
+    }
   }
 
   /** Best-effort notification write; a failure here must never fail the webhook.

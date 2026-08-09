@@ -14,6 +14,10 @@ export class AvailabilityRepository {
   create(data: Prisma.AvailabilitySlotUncheckedCreateInput) {
     return prisma.availabilitySlot.create({ data });
   }
+  /** Resolve the ServiceProvider profile owned by a user (for ownership checks). */
+  findProviderByUserId(userId: string) {
+    return prisma.serviceProvider.findUnique({ where: { userId } });
+  }
   delete(id: string) {
     return prisma.availabilitySlot.delete({ where: { id } });
   }

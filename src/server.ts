@@ -18,7 +18,16 @@ const server = app.listen(env.PORT, () => {
 /** Close the HTTP server and DB connections cleanly on shutdown signals. */
 async function shutdown(signal: string): Promise<void> {
   logger.info(`${signal} received — shutting down`);
+  // `close()` waits for keep-alive connections indefinitely; force the exit if
+  // the drain hasn't finished within the grace period.
+  const forceExit = setTimeout(() => {
+    logger.error("Graceful shutdown timed out — forcing exit");
+    server.closeAllConnections?.();
+    process.exit(1);
+  }, 10_000);
+  forceExit.unref(); // the timer itself must not keep the process alive
   server.close(() => {
+    clearTimeout(forceExit);
     void prisma.$disconnect().finally(() => process.exit(0));
   });
 }
