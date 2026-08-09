@@ -27,7 +27,10 @@ export class ReviewsController {
   };
 
   getById = async (req: Request, res: Response) => {
-    sendSuccess(res, await reviewsService.getById(req.params.id));
+    const viewer = req.user
+      ? { id: req.user.id, isStaff: isStaffRole(req.user.role) }
+      : undefined;
+    sendSuccess(res, await reviewsService.getById(req.params.id, viewer));
   };
 
   moderate = async (req: Request, res: Response) => {

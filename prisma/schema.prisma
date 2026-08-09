@@ -13,7 +13,16 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+  // Runtime connection. On serverless this is Supabase's TRANSACTION pooler
+  // (port 6543, `pgbouncer=true`): every function instance opens its own pool,
+  // so the session pooler's one-Postgres-connection-per-client model runs the
+  // database out of connections under concurrency. `pgbouncer=true` is required
+  // there — transaction mode cannot hold the named prepared statements Prisma
+  // would otherwise use.
+  url       = env("DATABASE_URL")
+  // Migrations + introspection need a single un-pooled session, which the
+  // transaction pooler cannot give them. Point this at port 5432.
+  directUrl = env("DIRECT_URL")
 }
 
 // ────────────────────────────────────────────────────────────────────────────

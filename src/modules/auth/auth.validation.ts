@@ -10,9 +10,14 @@ const brandSchema = z.preprocess(
   z.nativeEnum(Brand),
 );
 
+// Emails are matched case-insensitively (RFC domains are; mailbox local parts
+// effectively are too), so normalize to lowercase at the edge — otherwise
+// "John@x.com" and "john@x.com" register as two different accounts.
+const emailSchema = z.string().email().toLowerCase();
+
 export const registerSchema = z.object({
   name: z.string().min(1, "Name is required").max(120),
-  email: z.string().email(),
+  email: emailSchema,
   password: z.string().min(8, "Password must be at least 8 characters"),
   phone: z.string().min(5).optional(),
   brand: brandSchema,
@@ -24,7 +29,7 @@ export const registerSchema = z.object({
 });
 
 export const loginSchema = z.object({
-  email: z.string().email(),
+  email: emailSchema,
   password: z.string().min(1, "Password is required"),
 });
 
@@ -41,5 +46,5 @@ export const verifyEmailSchema = z.object({
 // Unauthenticated resend: caller supplies the address to (re)send to. The
 // service is deliberately silent about whether the address exists.
 export const resendVerificationSchema = z.object({
-  email: z.string().email(),
+  email: emailSchema,
 });

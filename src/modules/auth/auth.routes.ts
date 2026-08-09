@@ -2,7 +2,11 @@ import { Router } from "express";
 import { asyncHandler } from "../../utils/async-handler";
 import { authenticate } from "../../middleware/authenticate";
 import { validate } from "../../middleware/validate";
-import { authRateLimiter, verifyRateLimiter } from "../../middleware/rate-limit";
+import {
+  authRateLimiter,
+  verifyIpRateLimiter,
+  verifyRateLimiter,
+} from "../../middleware/rate-limit";
 import { authController } from "./auth.controller";
 import {
   registerSchema,
@@ -55,8 +59,11 @@ authRouter.post(
 );
 
 // Unauthenticated resend by email (e.g. session expired); enumeration-safe.
+// verifyRateLimiter keys on the attacker-supplied body email, so it also needs
+// the IP-keyed limiter — rotating addresses would otherwise bypass it entirely.
 authRouter.post(
   "/resend-verification/public",
+  verifyIpRateLimiter,
   verifyRateLimiter,
   validate({ body: resendVerificationSchema }),
   asyncHandler(authController.resendVerificationPublic),

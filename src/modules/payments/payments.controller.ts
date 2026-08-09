@@ -43,9 +43,18 @@ export class PaymentsController {
     if (typeof signature !== "string") {
       throw ApiError.badRequest("Missing webhook signature");
     }
+    // express.raw() yields `{}` — not a Buffer — when the Content-Type doesn't
+    // match or the body is empty, and signature verification would then fail
+    // with an opaque provider error. Fail here instead, naming the real cause:
+    // this is also the canary if middleware ever lands ahead of the raw mount.
+    if (!Buffer.isBuffer(req.body)) {
+      throw ApiError.badRequest(
+        "Expected a raw webhook body — the request was parsed before it reached the handler",
+      );
+    }
     const result = await paymentsService.handleProviderEvent(
       provider,
-      req.body as Buffer,
+      req.body,
       signature,
     );
     sendSuccess(res, result, "Webhook received");

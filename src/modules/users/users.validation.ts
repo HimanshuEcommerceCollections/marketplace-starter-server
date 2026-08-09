@@ -19,7 +19,9 @@ export const userIdSchema = z.object({ id: z.string().uuid() });
 /** Admin-only account creation — can set any role + an initial password. */
 export const createUserSchema = z.object({
   name: z.string().min(1, "Name is required").max(120),
-  email: z.string().email(),
+  // Lowercased to match auth's normalization — email equality is case-insensitive
+  // everywhere, so admin-provisioned accounts must not mint mixed-case rows.
+  email: z.string().email().toLowerCase(),
   password: z.string().min(8, "Password must be at least 8 characters"),
   phone: z.string().min(5).optional(),
   brand: brandSchema,

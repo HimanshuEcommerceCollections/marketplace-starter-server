@@ -5,10 +5,14 @@ import { stripeProvider } from "./stripe.provider";
 /**
  * Provider registry. Add new adapters (Razorpay, PayPal, …) to this map; the
  * payment service resolves them by name and is otherwise provider-agnostic.
+ * Null prototype so name lookups can only hit adapters we registered — a plain
+ * object literal would also resolve inherited Object.prototype keys
+ * ("constructor", "toString", …).
  */
-const providers: Record<string, PaymentProvider> = {
-  [stripeProvider.name]: stripeProvider,
-};
+const providers: Record<string, PaymentProvider> = Object.assign(
+  Object.create(null) as Record<string, PaymentProvider>,
+  { [stripeProvider.name]: stripeProvider },
+);
 
 const DEFAULT_PROVIDER = stripeProvider.name;
 

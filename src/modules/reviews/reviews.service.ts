@@ -45,14 +45,25 @@ export class ReviewsService {
     return { items, meta: buildMeta(page, limit, total) };
   }
 
-  async getById(id: string) {
+  async getById(id: string, viewer?: { id?: string; isStaff?: boolean }) {
     const review = await reviewsRepository.findById(id);
     if (!review) throw ApiError.notFound("Review not found");
+    // An unpublished (moderated-out) review is invisible to the public even by
+    // direct id — otherwise hiding a review doesn't actually hide it for anyone
+    // who kept the id. 404, not 403, so the id doesn't confirm existence.
+    // Staff and the review's own author still see it.
+    if (
+      !review.isPublished &&
+      !viewer?.isStaff &&
+      viewer?.id !== review.authorId
+    ) {
+      throw ApiError.notFound("Review not found");
+    }
     return review;
   }
 
   async moderate(id: string, dto: ModerateReviewDto) {
-    await this.getById(id);
+    await this.getById(id, { isStaff: true });
     return reviewsRepository.update(id, { isPublished: dto.isPublished });
   }
 }

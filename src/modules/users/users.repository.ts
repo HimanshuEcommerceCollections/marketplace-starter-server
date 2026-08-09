@@ -12,7 +12,11 @@ export class UsersRepository {
     return prisma.user.findUnique({ where: { id } });
   }
   findByEmail(email: string) {
-    return prisma.user.findUnique({ where: { email } });
+    // Case-insensitive to match auth's lookup: the duplicate check must catch
+    // "John@x.com" vs "john@x.com", including legacy mixed-case rows.
+    return prisma.user.findFirst({
+      where: { email: { equals: email, mode: "insensitive" } },
+    });
   }
   create(data: Prisma.UserUncheckedCreateInput) {
     return prisma.user.create({ data });

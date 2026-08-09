@@ -1,5 +1,6 @@
 import type { Prisma } from "@prisma/client";
 import { waitlistRepository } from "./waitlist.repository";
+import { servicesService } from "../services";
 import { ApiError } from "../../utils/api-error";
 import { buildPagination, buildMeta } from "../../utils/pagination";
 import { WaitlistStatus } from "../../enums";
@@ -7,6 +8,12 @@ import type { JoinWaitlistDto, ListWaitlistQuery } from "./waitlist.types";
 
 export class WaitlistService {
   async join(userId: string, dto: JoinWaitlistDto) {
+    // Customers may only queue for publicly-visible services. `staff: false`
+    // makes missing and unpublished (DRAFT/INACTIVE) services throw the SAME
+    // 404, so this public endpoint cannot be used to enumerate the unreleased
+    // catalogue (same pattern as coverage.service.ts's check()).
+    await servicesService.getById(dto.serviceId, false);
+
     const existing = await waitlistRepository.findByServiceAndUser(
       dto.serviceId,
       userId,

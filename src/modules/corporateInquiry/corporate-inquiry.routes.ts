@@ -3,6 +3,7 @@ import { asyncHandler } from "../../utils/async-handler";
 import { authenticate } from "../../middleware/authenticate";
 import { authorize } from "../../middleware/authorize";
 import { validate } from "../../middleware/validate";
+import { publicFormRateLimiter } from "../../middleware/rate-limit";
 import { UserRole } from "../../enums";
 import { corporateInquiryController } from "./corporate-inquiry.controller";
 import {
@@ -17,6 +18,7 @@ export const corporateInquiryRouter = Router();
 // Public: anyone can submit a corporate inquiry (marketing lead-gen, no auth).
 corporateInquiryRouter.post(
   "/",
+  publicFormRateLimiter,
   validate({ body: createCorporateInquirySchema }),
   asyncHandler(corporateInquiryController.create),
 );

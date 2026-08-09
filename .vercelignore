@@ -1,0 +1,11 @@
+# Vercel builds from source: dist/ is produced by scripts/postinstall.js during
+# the install step, so uploading a local (possibly stale) build would only risk
+# shadowing it. Everything secret stays out too — env values live in the Vercel
+# project's environment variables, never in the deployment bundle.
+dist/
+.env
+.env.*
+!.env.example
+.npmrc
+node_modules/
+docs/
