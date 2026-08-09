@@ -119,7 +119,7 @@ export class EmailService {
 
   /** Frontend booking-detail URL (APP_URL is the client origin, not the API). */
   private bookingUrl(bookingId: string): string {
-    return `${env.APP_URL.replace(/\/+$/, "")}/bookings/${bookingId}`;
+    return `${env.APP_URL}/bookings/${bookingId}`;
   }
 
   /**

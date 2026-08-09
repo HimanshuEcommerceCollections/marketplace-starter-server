@@ -169,7 +169,15 @@ const EnvSchema = z.object({
   // APP_URL is the FRONTEND base used to build clickable links in emails
   // (verification, booking details). EMAIL_VERIFICATION_TTL_MS controls how long
   // a verification token stays valid (default 24h).
-  APP_URL: z.string().url().default("http://localhost:3000"),
+  // Trailing slashes are stripped HERE so every consumer can safely append a
+  // path. Two of the three call sites used to do their own `.replace(/\/+$/,
+  // "")` and one (the verification link) did not — a value entered as
+  // "https://app.example.com/" silently produced "…//verify-email?token=".
+  APP_URL: z
+    .string()
+    .url()
+    .default("http://localhost:3000")
+    .transform((v) => v.replace(/\/+$/, "")),
   EMAIL_VERIFICATION_TTL_MS: z.coerce.number().int().positive().default(86_400_000),
 
   // How long a staff/provider invite link stays valid. Longer than a verification

@@ -313,7 +313,7 @@ export class AuthService {
       new Date(Date.now() + env.INVITE_TTL_MS),
       VerificationPurpose.INVITE,
     );
-    const inviteUrl = `${env.APP_URL.replace(/\/+$/, "")}/accept-invite?token=${rawToken}`;
+    const inviteUrl = `${env.APP_URL}/accept-invite?token=${rawToken}`;
     await emailService.sendInviteEmail(user.email, inviteUrl, {
       kind,
       recipientName: user.name,
