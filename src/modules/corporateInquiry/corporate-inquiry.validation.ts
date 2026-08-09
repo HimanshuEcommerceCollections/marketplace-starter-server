@@ -5,6 +5,9 @@ import { CorporateInquiryStatus } from "../../enums";
  * Public "Request a proposal" submission. The client folds selected service
  * chips + a free-text message into `notes`; `headcount`/`eventType` come from
  * the team-size/format selects. Everything is trimmed and length-capped.
+ *
+ * B2B only — a practitioner wanting to join applies through
+ * `professionalApplications` instead.
  */
 export const createCorporateInquirySchema = z.object({
   company: z.string().trim().min(1, "Company name is required").max(160),

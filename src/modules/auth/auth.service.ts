@@ -13,7 +13,7 @@ import { toPublicUser } from "../../utils/user";
 import { logger } from "../../utils/logger";
 import { env } from "../../config/env";
 import { emailService } from "../email";
-import { UserStatus } from "../../enums";
+import { UserStatus, VerificationPurpose } from "../../enums";
 import type { AuthUser } from "../../types/common.types";
 import type { RegisterDto, LoginDto, AuthTokens } from "./auth.types";
 
@@ -40,6 +40,16 @@ export class AuthService {
     }
     if (user.status === UserStatus.INACTIVE) {
       throw ApiError.forbidden("This account is inactive");
+    }
+    // An invited account has a random unusable password hash, so a password
+    // login would already fail — but say so explicitly rather than returning
+    // "Invalid credentials", which would send an invitee hunting for a typo.
+    if (user.status === UserStatus.INVITED) {
+      throw new ApiError(
+        HttpStatus.FORBIDDEN,
+        "This account hasn't been set up yet. Open the invitation link we emailed you to choose a password.",
+        { code: "INVITE_PENDING" },
+      );
     }
   }
 
@@ -180,6 +190,14 @@ export class AuthService {
    */
   async verifyEmail(rawToken: string) {
     const record = await authRepository.findVerificationToken(hashToken(rawToken));
+    // An INVITE token must not be redeemable here: /verify-email would activate
+    // the account WITHOUT ever setting a password, leaving it reachable only
+    // through a password reset that doesn't exist yet.
+    if (record && record.purpose !== VerificationPurpose.EMAIL_VERIFICATION) {
+      throw new ApiError(HttpStatus.BAD_REQUEST, "This verification link is invalid.", {
+        code: "TOKEN_INVALID",
+      });
+    }
     if (!record) {
       throw new ApiError(HttpStatus.BAD_REQUEST, "This verification link is invalid.", {
         code: "TOKEN_INVALID",
@@ -257,6 +275,136 @@ export class AuthService {
     void this.sendVerificationToken(user).catch((error) => {
       logger.error("Failed to resend verification email", error);
     });
+  }
+
+  // ── Invitations ─────────────────────────────────────────────────────────────
+
+  /**
+   * A password hash no password can ever produce. Invited accounts need SOME
+   * value in the non-nullable passwordHash column before their owner picks one;
+   * random bytes mean that even if the INVITED status check were bypassed, the
+   * bcrypt comparison in login could not succeed.
+   */
+  static async unusablePasswordHash(): Promise<string> {
+    return hashPassword(crypto.randomBytes(32).toString("hex"));
+  }
+
+  /**
+   * Issue a single-use invite link for an INVITED user and email it. Any
+   * outstanding invite is invalidated first so only the newest link works.
+   *
+   * Failures propagate: unlike verification mail, the caller (accepting an
+   * application, inviting a coordinator) needs to know the invite never landed
+   * so it can tell the admin to resend rather than reporting success.
+   */
+  async sendInvite(
+    user: User,
+    kind: "provider" | "staff",
+    roleLabel?: string,
+  ): Promise<void> {
+    await authRepository.deleteVerificationTokensForUser(
+      user.id,
+      VerificationPurpose.INVITE,
+    );
+    const rawToken = crypto.randomBytes(32).toString("hex");
+    await authRepository.storeVerificationToken(
+      user.id,
+      hashToken(rawToken),
+      new Date(Date.now() + env.INVITE_TTL_MS),
+      VerificationPurpose.INVITE,
+    );
+    const inviteUrl = `${env.APP_URL.replace(/\/+$/, "")}/accept-invite?token=${rawToken}`;
+    await emailService.sendInviteEmail(user.email, inviteUrl, {
+      kind,
+      recipientName: user.name,
+      roleLabel,
+    });
+  }
+
+  /** Kill any outstanding invite without touching the account itself. */
+  async revokeInvite(userId: string): Promise<void> {
+    await authRepository.deleteVerificationTokensForUser(
+      userId,
+      VerificationPurpose.INVITE,
+    );
+  }
+
+  /** Whether a live (unconsumed, unexpired) invite exists — drives the admin UI. */
+  async hasActiveInvite(userId: string): Promise<boolean> {
+    return (await authRepository.countActiveInvites(userId)) > 0;
+  }
+
+  /**
+   * Describe an invite token WITHOUT redeeming it, so the accept-invite page can
+   * greet the invitee by name and render a dead-link state before they type a
+   * password. Deliberately returns only the name + email already known to
+   * whoever holds the link.
+   */
+  async previewInvite(rawToken: string) {
+    const record = await authRepository.findVerificationToken(hashToken(rawToken));
+    this.assertInviteRedeemable(record);
+    const user = await authRepository.findUserById(record!.userId);
+    if (!user || user.status !== UserStatus.INVITED) {
+      throw new ApiError(HttpStatus.BAD_REQUEST, "This invitation link is invalid.", {
+        code: "TOKEN_INVALID",
+      });
+    }
+    return { name: user.name, email: user.email, role: user.role };
+  }
+
+  /**
+   * Redeem an invite: set the account's first password, activate it, and consume
+   * the token. The invitee is signed in immediately afterwards (same auto-login
+   * courtesy as registration) so acceptance lands them inside the product.
+   */
+  async acceptInvite(rawToken: string, password: string) {
+    const record = await authRepository.findVerificationToken(hashToken(rawToken));
+    this.assertInviteRedeemable(record);
+
+    const user = await authRepository.findUserById(record!.userId);
+    if (!user || user.status !== UserStatus.INVITED) {
+      throw new ApiError(HttpStatus.BAD_REQUEST, "This invitation link is invalid.", {
+        code: "TOKEN_INVALID",
+      });
+    }
+
+    const passwordHash = await hashPassword(password);
+    const updated = await authRepository.setPassword(user.id, {
+      passwordHash,
+      status: UserStatus.ACTIVE,
+      // Clicking a link sent to that address IS the proof of ownership, so the
+      // invitee never has to run the separate verification round-trip.
+      emailVerifiedAt: new Date(),
+    });
+    await authRepository.consumeVerificationToken(record!.id);
+
+    const tokens = await this.issueTokens(updated);
+    return { user: toPublicUser(updated), ...tokens };
+  }
+
+  /** Shared validity checks for an invite token. Throws with a client `code`. */
+  private assertInviteRedeemable(
+    record: Awaited<ReturnType<typeof authRepository.findVerificationToken>>,
+  ): void {
+    if (!record || record.purpose !== VerificationPurpose.INVITE) {
+      throw new ApiError(HttpStatus.BAD_REQUEST, "This invitation link is invalid.", {
+        code: "TOKEN_INVALID",
+      });
+    }
+    if (record.consumedAt) {
+      throw new ApiError(
+        HttpStatus.BAD_REQUEST,
+        "This invitation has already been used. Try signing in instead.",
+        { code: "TOKEN_INVALID" },
+      );
+    }
+    if (record.expiresAt.getTime() < Date.now()) {
+      throw new ApiError(
+        HttpStatus.BAD_REQUEST,
+        "This invitation has expired. Ask your Elevate contact to send a new one.",
+        { code: "TOKEN_EXPIRED" },
+      );
+    }
   }
 }
 

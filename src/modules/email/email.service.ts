@@ -4,6 +4,7 @@ import { logger } from "../../utils/logger";
 import { resolveEmailProvider } from "./providers";
 import type { EmailProvider } from "./providers";
 import { buildVerificationEmail } from "./templates/verification";
+import { buildInviteEmail } from "./templates/invite";
 import {
   buildBookingCancelledEmail,
   buildBookingConfirmedEmail,
@@ -51,6 +52,34 @@ export class EmailService {
         recipientName,
       }),
       "Verification",
+    );
+  }
+
+  /**
+   * Send an account invitation (accepted professional, or internal staff). Unlike
+   * verification mail this one is NOT fire-and-forget at the call site: an invite
+   * that never arrives leaves an account nobody can reach, so callers surface the
+   * failure and offer a resend.
+   */
+  async sendInviteEmail(
+    to: string,
+    inviteUrl: string,
+    params: {
+      kind: "provider" | "staff";
+      recipientName?: string | null;
+      roleLabel?: string;
+    },
+  ): Promise<void> {
+    await this.deliver(
+      to,
+      buildInviteEmail({
+        inviteUrl,
+        expiresInHours: Math.round(env.INVITE_TTL_MS / HOUR_MS),
+        recipientName: params.recipientName,
+        kind: params.kind,
+        roleLabel: params.roleLabel,
+      }),
+      "Invite",
     );
   }
 

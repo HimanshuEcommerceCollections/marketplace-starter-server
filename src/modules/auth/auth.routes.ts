@@ -14,6 +14,8 @@ import {
   refreshSchema,
   verifyEmailSchema,
   resendVerificationSchema,
+  inviteTokenSchema,
+  acceptInviteSchema,
 } from "./auth.validation";
 
 export const authRouter = Router();
@@ -67,4 +69,20 @@ authRouter.post(
   verifyRateLimiter,
   validate({ body: resendVerificationSchema }),
   asyncHandler(authController.resendVerificationPublic),
+);
+
+// ── Invitations (public: the token in the request IS the credential) ──────────
+// Both are IP-rate-limited because the token is guessable only by brute force and
+// neither endpoint requires a session.
+authRouter.get(
+  "/invite",
+  verifyIpRateLimiter,
+  validate({ query: inviteTokenSchema }),
+  asyncHandler(authController.previewInvite),
+);
+authRouter.post(
+  "/accept-invite",
+  verifyIpRateLimiter,
+  validate({ body: acceptInviteSchema }),
+  asyncHandler(authController.acceptInvite),
 );

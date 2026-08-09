@@ -38,6 +38,9 @@ enum UserRole {
 
 enum UserStatus {
   PENDING_VERIFICATION
+  // Admin/coordinator-provisioned account that has been emailed an invite but has
+  // not yet set a password. Cannot sign in until the invite is accepted.
+  INVITED
   ACTIVE
   INACTIVE
   SUSPENDED
@@ -172,6 +175,22 @@ enum CorporateInquiryStatus {
   CLOSED // resolved (won, lost, or archived)
 }
 
+enum ProfessionalApplicationStatus {
+  NEW // just submitted, awaiting triage
+  REVIEWING // a coordinator is vetting the applicant
+  ACCEPTED // approved — an INVITED provider account has been created
+  REJECTED // declined or archived (no account, no email sent)
+}
+
+/// Why a VerificationToken was issued. EMAIL_VERIFICATION tokens redeem at
+/// /verify-email; INVITE tokens redeem at /accept-invite and additionally set the
+/// account's first password. Kept distinct so a signup link can never be replayed
+/// to take over an invited staff/provider account.
+enum VerificationPurpose {
+  EMAIL_VERIFICATION
+  INVITE
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 // Identity & access
 // ────────────────────────────────────────────────────────────────────────────
@@ -224,16 +243,18 @@ model RefreshToken {
 /// outstanding rows for a user are deleted when a new token is requested (resend),
 /// so at most one live token exists per user at a time.
 model VerificationToken {
-  id         String    @id @default(uuid())
+  id         String              @id @default(uuid())
   userId     String
-  tokenHash  String    @unique
+  tokenHash  String              @unique
+  purpose    VerificationPurpose @default(EMAIL_VERIFICATION)
   expiresAt  DateTime
   consumedAt DateTime?
-  createdAt  DateTime  @default(now())
+  createdAt  DateTime            @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+  @@index([userId, purpose])
 }
 
 /// Profile for users who deliver services (role SYSTEM_PROVIDER or SYSTEM_COORDINATOR).
@@ -704,6 +725,10 @@ model WebhookEvent {
 /// Anonymous (no user relation) — captured by anyone; read/triaged by staff in
 /// the admin dashboard. `headcount`, `eventType`, and `preferredDate` are kept
 /// as free-text strings because they come from open-ended form fields.
+/// B2B lead: a company requesting an on-site/hybrid wellness program, submitted
+/// from the public /corporate/inquiry page. Purely a sales lead — it never
+/// creates an account. Distinct from ProfessionalApplication below, which is a
+/// practitioner asking to join the marketplace.
 model CorporateInquiry {
   id            String                 @id @default(uuid())
   company       String
@@ -717,6 +742,34 @@ model CorporateInquiry {
   status        CorporateInquiryStatus @default(NEW)
   createdAt     DateTime               @default(now())
   updatedAt     DateTime               @updatedAt
+
+  @@index([status])
+  @@index([createdAt])
+}
+
+/// A practitioner's application to join the marketplace, submitted from the form
+/// at the foot of the public /pros page. Accepting one provisions an INVITED User
+/// + ServiceProvider profile and emails an invite to `contactEmail` — the address
+/// the applicant themselves supplied, which is why it is the only contact field
+/// that is required and normalized.
+model ProfessionalApplication {
+  id              String                        @id @default(uuid())
+  contactName     String
+  contactEmail    String
+  contactPhone    String?
+  serviceCategory String // primary service they practise (e.g. "Massage Therapy")
+  credential      String? // licence/certification shown on bookings (e.g. "LMBT")
+  experienceYears Int? // years practising
+  serviceArea     String? // free text at intake (e.g. "Raleigh, Wake County")
+  website         String?
+  notes           String? // free-text "about your practice"
+  status          ProfessionalApplicationStatus @default(NEW)
+  reviewedAt      DateTime? // when it was accepted or rejected
+  reviewedById    String? // staff user who decided (no relation: audit trail must
+  // survive that user being deleted)
+  invitedUserId   String? @unique // the User created on accept, if any
+  createdAt       DateTime                      @default(now())
+  updatedAt       DateTime                      @updatedAt
 
   @@index([status])
   @@index([createdAt])

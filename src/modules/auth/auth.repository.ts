@@ -1,5 +1,6 @@
 import { prisma } from "../../db/client";
 import type { Prisma } from "@prisma/client";
+import { VerificationPurpose } from "../../enums";
 
 /** Data-access for auth: users + refresh tokens. No business rules here. */
 export class AuthRepository {
@@ -51,11 +52,21 @@ export class AuthRepository {
     });
   }
 
-  // ── Email-verification tokens (only SHA-256 hashes are stored) ──────────────
+  /** Set a brand-new password hash (invite acceptance). */
+  setPassword(userId: string, data: Pick<Prisma.UserUncheckedUpdateInput, "passwordHash" | "status" | "emailVerifiedAt">) {
+    return prisma.user.update({ where: { id: userId }, data });
+  }
 
-  storeVerificationToken(userId: string, tokenHash: string, expiresAt: Date) {
+  // ── Verification / invite tokens (only SHA-256 hashes are stored) ───────────
+
+  storeVerificationToken(
+    userId: string,
+    tokenHash: string,
+    expiresAt: Date,
+    purpose: VerificationPurpose = VerificationPurpose.EMAIL_VERIFICATION,
+  ) {
     return prisma.verificationToken.create({
-      data: { userId, tokenHash, expiresAt },
+      data: { userId, tokenHash, expiresAt, purpose },
     });
   }
 
@@ -71,9 +82,27 @@ export class AuthRepository {
     });
   }
 
-  /** Invalidate every outstanding token for a user (used before issuing a new one). */
-  deleteVerificationTokensForUser(userId: string) {
-    return prisma.verificationToken.deleteMany({ where: { userId } });
+  /**
+   * Invalidate a user's outstanding tokens (used before issuing a new one).
+   * Scoped by purpose so re-sending an invite doesn't quietly wipe a pending
+   * email-verification token, or vice versa.
+   */
+  deleteVerificationTokensForUser(userId: string, purpose?: VerificationPurpose) {
+    return prisma.verificationToken.deleteMany({
+      where: { userId, ...(purpose ? { purpose } : {}) },
+    });
+  }
+
+  /** True when the user has an unconsumed, unexpired invite outstanding. */
+  countActiveInvites(userId: string) {
+    return prisma.verificationToken.count({
+      where: {
+        userId,
+        purpose: VerificationPurpose.INVITE,
+        consumedAt: null,
+        expiresAt: { gt: new Date() },
+      },
+    });
   }
 }
 

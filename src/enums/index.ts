@@ -19,6 +19,8 @@ export {
   NotificationType,
   NotificationStatus,
   CorporateInquiryStatus,
+  ProfessionalApplicationStatus,
+  VerificationPurpose,
 } from "@prisma/client";
 
 export * from "./app.enums";

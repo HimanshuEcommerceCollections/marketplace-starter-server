@@ -48,3 +48,14 @@ export const verifyEmailSchema = z.object({
 export const resendVerificationSchema = z.object({
   email: emailSchema,
 });
+
+// Invite tokens share the verification token's shape (32 random bytes, hex).
+export const inviteTokenSchema = z.object({
+  token: z.string().min(32, "A valid invitation token is required").max(256),
+});
+
+// Redeeming an invite sets the account's FIRST password, so it carries the same
+// minimum as registration rather than login's "non-empty".
+export const acceptInviteSchema = inviteTokenSchema.extend({
+  password: z.string().min(8, "Password must be at least 8 characters"),
+});

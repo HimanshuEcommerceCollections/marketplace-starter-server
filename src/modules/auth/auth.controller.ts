@@ -9,6 +9,8 @@ import type {
   RefreshDto,
   VerifyEmailDto,
   ResendVerificationDto,
+  InviteTokenDto,
+  AcceptInviteDto,
 } from "./auth.types";
 
 // Deliberately generic so resend endpoints never reveal whether an address has
@@ -70,6 +72,21 @@ export class AuthController {
     const { email } = req.body as ResendVerificationDto;
     await authService.resendVerificationForEmail(email);
     sendSuccess(res, null, RESEND_ACK);
+  };
+
+  // Public — the token IS the credential. Read-only look-up so the accept-invite
+  // page can greet the invitee (or show a dead-link state) before they submit.
+  previewInvite = async (req: Request, res: Response) => {
+    const { token } = req.query as unknown as InviteTokenDto;
+    const invite = await authService.previewInvite(token);
+    sendSuccess(res, invite);
+  };
+
+  // Public — redeems the invite, sets the first password, and signs them in.
+  acceptInvite = async (req: Request, res: Response) => {
+    const { token, password } = req.body as AcceptInviteDto;
+    const result = await authService.acceptInvite(token, password);
+    sendSuccess(res, result, "Your account is ready");
   };
 }
 

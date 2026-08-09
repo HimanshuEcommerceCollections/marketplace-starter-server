@@ -6,6 +6,8 @@ export {
 export { resolveEmailProvider } from "./providers";
 export type { EmailProvider, SendEmailParams, SentEmail } from "./providers";
 export { buildVerificationEmail } from "./templates/verification";
+export { buildInviteEmail } from "./templates/invite";
+export type { InviteEmailParams } from "./templates/invite";
 export {
   buildBookingConfirmedEmail,
   buildBookingCancelledEmail,

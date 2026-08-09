@@ -10,6 +10,7 @@ import { reviewsRouter } from "../modules/reviews";
 import { adminRouter } from "../modules/admin";
 import { paymentsRouter } from "../modules/payments";
 import { corporateInquiryRouter } from "../modules/corporateInquiry";
+import { professionalApplicationsRouter } from "../modules/professionalApplications";
 import { areasRouter } from "../modules/areas";
 import { zipCodesRouter } from "../modules/zipCodes";
 import { coverageRouter } from "../modules/coverage";
@@ -44,6 +45,7 @@ apiRouter.use("/reviews", reviewsRouter);
 apiRouter.use("/admin", adminRouter);
 apiRouter.use("/payments", paymentsRouter);
 apiRouter.use("/corporate-inquiries", corporateInquiryRouter);
+apiRouter.use("/professional-applications", professionalApplicationsRouter);
 
 // Service coverage: admin-managed geography (areas + their ZIP codes) and the
 // per-service availability rules resolved from them at booking time. `/coverage`

@@ -9,6 +9,7 @@ import type {
   UpdateMeDto,
   UpdateRoleDto,
   UpdateStatusDto,
+  InviteUserDto,
 } from "./users.types";
 
 export class UsersController {
@@ -37,6 +38,30 @@ export class UsersController {
     if (!req.user) throw ApiError.unauthorized();
     const user = await usersService.updateProfile(req.user.id, req.body as UpdateMeDto);
     sendSuccess(res, user, "Profile updated");
+  };
+
+  invite = async (req: Request, res: Response) => {
+    const { user, inviteEmailSent } = await usersService.invite(
+      req.body as InviteUserDto,
+    );
+    sendSuccess(
+      res,
+      { user, inviteEmailSent },
+      inviteEmailSent
+        ? "Invitation sent"
+        : "Account created, but the invitation email could not be sent. Try resending it.",
+      HttpStatus.CREATED,
+    );
+  };
+
+  resendInvite = async (req: Request, res: Response) => {
+    const user = await usersService.resendInvite(req.params.id);
+    sendSuccess(res, user, "Invitation resent");
+  };
+
+  revokeInvite = async (req: Request, res: Response) => {
+    const user = await usersService.revokeInvite(req.params.id);
+    sendSuccess(res, user, "Invitation revoked");
   };
 
   updateRole = async (req: Request, res: Response) => {

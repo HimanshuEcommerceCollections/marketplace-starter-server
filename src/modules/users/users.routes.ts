@@ -11,6 +11,7 @@ import {
   updateMeSchema,
   updateRoleSchema,
   updateStatusSchema,
+  inviteUserSchema,
 } from "./users.validation";
 import { UserRole } from "../../enums";
 
@@ -42,12 +43,35 @@ usersRouter.post(
   validate({ body: createUserSchema }),
   asyncHandler(usersController.create),
 );
+// Invite-based provisioning (no password chosen by the admin). Admin-only, same
+// bar as POST / — both mint an account with a privileged role.
+usersRouter.post(
+  "/invite",
+  authenticate,
+  authorize(UserRole.SYSTEM_ADMIN),
+  validate({ body: inviteUserSchema }),
+  asyncHandler(usersController.invite),
+);
 usersRouter.get(
   "/:id",
   authenticate,
   authorize(UserRole.SYSTEM_ADMIN, UserRole.SYSTEM_COORDINATOR),
   validate({ params: userIdSchema }),
   asyncHandler(usersController.getById),
+);
+usersRouter.post(
+  "/:id/invite/resend",
+  authenticate,
+  authorize(UserRole.SYSTEM_ADMIN),
+  validate({ params: userIdSchema }),
+  asyncHandler(usersController.resendInvite),
+);
+usersRouter.delete(
+  "/:id/invite",
+  authenticate,
+  authorize(UserRole.SYSTEM_ADMIN),
+  validate({ params: userIdSchema }),
+  asyncHandler(usersController.revokeInvite),
 );
 usersRouter.patch(
   "/:id/role",

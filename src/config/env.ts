@@ -172,6 +172,12 @@ const EnvSchema = z.object({
   APP_URL: z.string().url().default("http://localhost:3000"),
   EMAIL_VERIFICATION_TTL_MS: z.coerce.number().int().positive().default(86_400_000),
 
+  // How long a staff/provider invite link stays valid. Longer than a verification
+  // link (default 7 days) because an invitee is not sitting at a signup form
+  // waiting for it — they may be reading the email days after a coordinator
+  // accepted their application. Expired invites are re-sendable from the admin UI.
+  INVITE_TTL_MS: z.coerce.number().int().positive().default(604_800_000),
+
   // Master switch for outbound notification email (booking confirmed/cancelled).
   // In-app notification rows are always written; this only governs whether they
   // are also emailed. Parsed like EMAIL_VERIFICATION_REQUIRED below.

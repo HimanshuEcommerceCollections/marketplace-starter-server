@@ -10,6 +10,7 @@ import {
   ConfigSelectionType,
   ConfigStatus,
   CorporateInquiryStatus,
+  ProfessionalApplicationStatus,
   GeoStatus,
   CoverageEffect,
   CoverageSource,
@@ -97,8 +98,9 @@ async function main() {
   });
 
   // ── Sample corporate inquiries ───────────────────────────────────────────────
-  // Demo lead-gen rows so the admin "Inquiries" section isn't empty. Only seeded
-  // when the table is empty (illustrative placeholder content, not real leads).
+  // Demo B2B lead-gen rows so the admin "Inquiries" section isn't empty. Only
+  // seeded when the table is empty (illustrative placeholder content, not real
+  // leads). Entirely separate from the practitioner applications seeded below.
   const inquiryCount = await prisma.corporateInquiry.count();
   if (inquiryCount === 0) {
     await prisma.corporateInquiry.createMany({
@@ -134,6 +136,55 @@ async function main() {
           notes:
             "Services of interest: Open to suggestions\n\nTeam offsite in September, ~30 people.",
           status: CorporateInquiryStatus.QUALIFIED,
+        },
+      ],
+    });
+  }
+
+  // ── Sample professional applications ─────────────────────────────────────────
+  // Demo rows so the admin Professionals → Applications tab isn't empty. Only
+  // seeded when the table is empty (illustrative placeholder content, not real
+  // applicants). All left OPEN — accepting one is the flow being demoed, and a
+  // pre-ACCEPTED row would imply an invited account that does not exist.
+  const applicationCount = await prisma.professionalApplication.count();
+  if (applicationCount === 0) {
+    await prisma.professionalApplication.createMany({
+      data: [
+        {
+          contactName: "Dana Whitfield",
+          contactEmail: "dana.whitfield@example.test",
+          contactPhone: "(919) 555-0142",
+          serviceCategory: "Massage Therapy",
+          credential: "LMBT",
+          experienceYears: 8,
+          serviceArea: "Raleigh, Cary",
+          website: "https://example.test/dana",
+          notes:
+            "Deep tissue and prenatal focus. Currently mobile-only, looking to add recurring corporate clients.",
+          status: ProfessionalApplicationStatus.NEW,
+        },
+        {
+          contactName: "Marcus Lee",
+          contactEmail: "marcus.lee@example.test",
+          serviceCategory: "Nutrition Coaching",
+          credential: "RD",
+          experienceYears: 5,
+          serviceArea: "Durham, Chapel Hill",
+          notes:
+            "Registered dietitian, mostly virtual consults. Available weekday evenings.",
+          status: ProfessionalApplicationStatus.REVIEWING,
+        },
+        {
+          contactName: "Priya Anand",
+          contactEmail: "priya.anand@example.test",
+          contactPhone: "(415) 555-0199",
+          serviceCategory: "Yoga",
+          credential: "RYT-500",
+          experienceYears: 12,
+          serviceArea: "Raleigh",
+          website: "https://example.test/priya",
+          notes: "Vinyasa and restorative. Has taught corporate on-site programs.",
+          status: ProfessionalApplicationStatus.NEW,
         },
       ],
     });
