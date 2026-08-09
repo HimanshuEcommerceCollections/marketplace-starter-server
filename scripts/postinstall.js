@@ -8,6 +8,11 @@
 // unaffected — no rebuilds, and no shell-chaining that would trip the
 // powershell.exe script-shell used locally.
 //
+// Vercel deliberately does NOT go through here: it caches node_modules, and on
+// a cache hit npm skips install lifecycle scripts, which would ship a stale
+// Prisma client and no dist/. Its equivalent work lives in the build step —
+// see scripts/vercel-build.js.
+//
 // Done in Node (not an npm-script `&&` chain) on purpose: Windows PowerShell
 // 5.1 — the local script shell — does not support `&&`.
 

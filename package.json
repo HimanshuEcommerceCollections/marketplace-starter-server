@@ -9,6 +9,7 @@
     "build": "tsc",
     "start": "node dist/server.js",
     "postinstall": "node scripts/postinstall.js",
+    "vercel-build": "node scripts/vercel-build.js",
     "typecheck": "tsc --noEmit",
     "prisma:generate": "prisma generate",
     "prisma:migrate:local": "prisma migrate dev",
